@@ -1,0 +1,57 @@
+{
+  "task_id": "mixtiles-3d-museum-open-license-defaults",
+  "task_description": "Use downloaded open-license family photos as the default gallery art and keep the museum room working.",
+  "project_path": ".",
+  "required_files": [
+    "README.md",
+    "package.json",
+    "src/app.ts",
+    "src/data/layouts.ts",
+    "src/gallery/createGalleryWall.ts",
+    "src/gallery/images.ts",
+    "src/gallery/persistence.ts",
+    "README.md",
+    "src/assets/open-license/open-01.jpg",
+    "src/assets/open-license/open-04.jpg",
+    "src/assets/open-license/SOURCES.md",
+    "src/tests/layout.test.ts"
+  ],
+  "must_contain_checks": [
+    {
+      "file": "src/gallery/images.ts",
+      "text": "assets/open-license/open-01.jpg"
+    },
+    {
+      "file": "src/gallery/images.ts",
+      "text": "createPlaceholderGalleryImages"
+    },
+    {
+      "file": "src/data/layouts.ts",
+      "text": "Oak Family Wall"
+    },
+    {
+      "file": "src/gallery/createGalleryWall.ts",
+      "text": "createContainedPhotoTexture"
+    },
+    {
+      "file": "src/app.ts",
+      "text": "curated family-photo collection"
+    },
+    {
+      "file": "README.md",
+      "text": "downloaded local copies of open-license"
+    },
+    {
+      "file": "src/assets/open-license/SOURCES.md",
+      "text": "Wikimedia Commons"
+    }
+  ],
+  "test_command": "powershell -NoLogo -NoProfile -Command \"npm test; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; npm run build\"",
+  "expected_outputs": [
+    "tests pass",
+    "production build succeeds"
+  ],
+  "proof_required": [
+    "test_output"
+  ]
+}

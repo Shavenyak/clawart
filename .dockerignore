@@ -1,0 +1,11 @@
+node_modules
+dist
+.git
+.gitignore
+.playwright-check-1
+test-results
+*.log
+playwright*
+museum-check*
+ui-brand-check.png
+report.json

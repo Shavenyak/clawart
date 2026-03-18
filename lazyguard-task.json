@@ -1,0 +1,44 @@
+{
+  "task_id": "mixtiles-3d-museum-v1",
+  "task_description": "Implement a walkable Mixtiles-style 3D museum room with uploads, persistence, desktop and mobile controls, and passing build/tests.",
+  "project_path": "C:/Users/odedb/OneDrive/Documents/Playground/mixtiles-3d-museum",
+  "required_files": [
+    "README.md",
+    "package.json",
+    "src/app.ts",
+    "src/room/buildMuseumRoom.ts",
+    "src/gallery/createGalleryWall.ts",
+    "src/gallery/persistence.ts",
+    "src/tests/movement.test.ts"
+  ],
+  "must_contain_checks": [
+    {
+      "file": "src/app.ts",
+      "text": "Upload Photos"
+    },
+    {
+      "file": "src/app.ts",
+      "text": "requestPointerLock"
+    },
+    {
+      "file": "src/room/buildMuseumRoom.ts",
+      "text": "createHotspot"
+    },
+    {
+      "file": "src/gallery/persistence.ts",
+      "text": "localStorage"
+    },
+    {
+      "file": "src/gallery/createGalleryWall.ts",
+      "text": "createGalleryWall"
+    }
+  ],
+  "test_command": "powershell -NoLogo -NoProfile -Command \"npm test; if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }; npm run build\"",
+  "expected_outputs": [
+    "vitest tests must pass",
+    "vite production build must succeed"
+  ],
+  "proof_required": [
+    "test_output"
+  ]
+}

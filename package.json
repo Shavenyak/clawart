@@ -1,0 +1,28 @@
+{
+  "name": "mixtiles-3d-museum",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "concurrently -k -n client,server -c cyan,magenta \"npm:dev:client\" \"npm:dev:server\"",
+    "dev:client": "vite",
+    "dev:server": "node server/realtime-server.mjs",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "preview:shared": "npm run build && node server/realtime-server.mjs",
+    "start": "node server/realtime-server.mjs",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "three": "^0.181.1",
+    "ws": "^8.19.0"
+  },
+  "devDependencies": {
+    "@types/three": "^0.183.1",
+    "concurrently": "^9.2.1",
+    "jsdom": "^29.0.0",
+    "typescript": "~5.9.3",
+    "vite": "^8.0.0",
+    "vitest": "^4.1.0"
+  }
+}
