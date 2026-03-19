@@ -17,6 +17,7 @@ export interface RemotePlayerState {
 export interface RoomSnapshot {
   uploadedImages: GalleryImage[]
   tilePlacements: GalleryTilePlacements
+  activeStationId: string | null
   players: RemotePlayerState[]
 }
 
@@ -26,6 +27,7 @@ export interface JoinPayload {
   pose: PlayerPoseState
   uploadedImages: GalleryImage[]
   tilePlacements: GalleryTilePlacements
+  activeStationId: string | null
 }
 
 export type ClientToServerMessage =
@@ -44,6 +46,12 @@ export type ClientToServerMessage =
   | {
       type: 'gallery_sync'
       payload: GalleryImage[]
+    }
+  | {
+      type: 'station_sync'
+      payload: {
+        activeStationId: string | null
+      }
     }
 
 export type ServerToClientMessage =
@@ -80,6 +88,13 @@ export type ServerToClientMessage =
       type: 'gallery_sync'
       payload: {
         uploadedImages: GalleryImage[]
+        changedBy: string
+      }
+    }
+  | {
+      type: 'station_sync'
+      payload: {
+        activeStationId: string | null
         changedBy: string
       }
     }

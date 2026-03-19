@@ -106,6 +106,9 @@ wss.on('connection', (socket) => {
       case 'gallery_sync':
         handleGallerySync(socket, message.payload)
         break
+      case 'station_sync':
+        handleStationSync(socket, message.payload)
+        break
       default:
         send(socket, {
           type: 'error',
@@ -166,6 +169,13 @@ function handleJoin(socket, payload) {
     room.uploadedImages = Array.isArray(payload.uploadedImages) ? payload.uploadedImages : []
   }
 
+  if (typeof room.activeStationId === 'undefined') {
+    room.activeStationId =
+      typeof payload.activeStationId === 'string' && payload.activeStationId.trim().length > 0
+        ? payload.activeStationId.trim()
+        : null
+  }
+
   send(socket, {
     type: 'welcome',
     payload: {
@@ -174,6 +184,7 @@ function handleJoin(socket, payload) {
       snapshot: {
         uploadedImages: room.uploadedImages,
         tilePlacements: room.tilePlacements,
+        activeStationId: room.activeStationId ?? null,
         players: Array.from(room.players.values()),
       },
     },
@@ -260,6 +271,31 @@ function handleGallerySync(socket, uploadedImages) {
   )
 }
 
+function handleStationSync(socket, payload) {
+  const room = getRoomForSocket(socket)
+
+  if (!room) {
+    return
+  }
+
+  room.activeStationId =
+    typeof payload?.activeStationId === 'string' && payload.activeStationId.trim().length > 0
+      ? payload.activeStationId.trim()
+      : null
+
+  broadcastToRoom(
+    room,
+    {
+      type: 'station_sync',
+      payload: {
+        activeStationId: room.activeStationId,
+        changedBy: socket.data.clientId,
+      },
+    },
+    socket.data.clientId,
+  )
+}
+
 function handleDisconnect(socket) {
   const room = getRoomForSocket(socket)
 
@@ -291,6 +327,7 @@ function getOrCreateRoom(roomId) {
     id: roomId,
     uploadedImages: [],
     tilePlacements: {},
+    activeStationId: null,
     players: new Map(),
   }
   rooms.set(roomId, room)

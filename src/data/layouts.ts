@@ -98,6 +98,15 @@ export const VIEWPOINTS: Viewpoint[] = [
       pitch: -0.05,
     },
   },
+  {
+    id: 'radio',
+    label: 'Listening Corner',
+    pose: {
+      position: { x: 2.95, y: 1.66, z: 3.45 },
+      yaw: 2.38,
+      pitch: -0.08,
+    },
+  },
 ]
 
 export const WALL_TEMPLATES: GalleryWallTemplate[] = [

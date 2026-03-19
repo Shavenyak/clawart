@@ -13,6 +13,7 @@ import {
   createGalleryWall,
   type InteractiveGalleryTile,
 } from '../gallery/createGalleryWall'
+import { MUSIC_STATIONS } from '../audio/musicStations'
 import type {
   CameraPose,
   GalleryImage,
@@ -21,6 +22,10 @@ import type {
   Viewpoint,
 } from '../types'
 import type { RectBounds, RectObstacle } from '../controls/movement'
+import {
+  createMusicCorner,
+  type InteractiveMusicControl,
+} from './createMusicCorner'
 
 export interface MuseumHotspot {
   id: string
@@ -50,6 +55,7 @@ export interface MuseumRoom {
   galleryWalls: GalleryWall[]
   interactiveTiles: InteractiveGalleryTile[]
   interactiveWalls: InteractiveWallPlane[]
+  interactiveMusicControls: InteractiveMusicControl[]
 }
 
 export function buildMuseumRoom(
@@ -63,9 +69,11 @@ export function buildMuseumRoom(
   const galleryWalls = buildGalleryWalls(WALL_TEMPLATES, images, tilePlacements)
   const interactiveTiles: InteractiveGalleryTile[] = []
   const interactiveWalls = WALL_TEMPLATES.map((wall) => createInteractiveWallPlane(wall))
+  const musicCorner = createMusicCorner(MUSIC_STATIONS)
   group.add(createLights())
   group.add(createArchitecture())
   group.add(createBench())
+  group.add(musicCorner.group)
 
   for (const wall of galleryWalls) {
     const renderedWall = createGalleryWall(wall, images, MUSEUM_THEME)
@@ -81,7 +89,7 @@ export function buildMuseumRoom(
   return {
     group,
     bounds: ROOM_BOUNDS,
-    obstacles: ROOM_OBSTACLES,
+    obstacles: [...ROOM_OBSTACLES, musicCorner.obstacle],
     hotspots,
     viewpoints: VIEWPOINTS,
     intro: INTRO_POSES,
@@ -89,6 +97,7 @@ export function buildMuseumRoom(
     galleryWalls,
     interactiveTiles,
     interactiveWalls,
+    interactiveMusicControls: musicCorner.controls,
   }
 }
 

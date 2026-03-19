@@ -2,6 +2,16 @@ export type ImageSource = 'placeholder' | 'upload'
 export type FrameStyle = 'oak' | 'black' | 'white' | 'canvas'
 export type ImageOrientation = 'portrait' | 'landscape' | 'square'
 
+export interface MusicStation {
+  id: string
+  label: string
+  genre: string
+  description: string
+  streamUrl: string
+  sourceUrl: string
+  accentColor: string
+}
+
 export interface GalleryImage {
   id: string
   label: string
@@ -91,4 +101,5 @@ export interface GalleryState {
   playerName?: string
   slotAssignments?: GallerySlotAssignments
   tilePlacements?: GalleryTilePlacements
+  activeStationId?: string
 }

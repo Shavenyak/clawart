@@ -32,12 +32,17 @@ export function restoreGalleryState(roomId: string = 'local'): GalleryState | nu
         : undefined
     const slotAssignments = isStringRecord(parsed.slotAssignments) ? parsed.slotAssignments : undefined
     const tilePlacements = isPlacementRecord(parsed.tilePlacements) ? parsed.tilePlacements : undefined
+    const activeStationId =
+      typeof parsed.activeStationId === 'string' && parsed.activeStationId.trim().length > 0
+        ? parsed.activeStationId.trim()
+        : undefined
 
     return {
       uploadedImages,
       playerName,
       slotAssignments,
       tilePlacements,
+      activeStationId,
     }
   } catch {
     return null

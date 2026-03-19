@@ -17,6 +17,7 @@ interface MultiplayerClientCallbacks {
   onPlayerLeft: (playerId: string) => void
   onTileSync: (tilePlacements: GalleryTilePlacements, changedBy: string) => void
   onGallerySync: (uploadedImages: GalleryImage[], changedBy: string) => void
+  onStationSync: (activeStationId: string | null, changedBy: string) => void
   onError: (message: string) => void
 }
 
@@ -76,6 +77,15 @@ export class MuseumMultiplayerClient {
     this.send({
       type: 'gallery_sync',
       payload: uploadedImages,
+    })
+  }
+
+  updateActiveStationId(activeStationId: string | null): void {
+    this.send({
+      type: 'station_sync',
+      payload: {
+        activeStationId,
+      },
     })
   }
 
@@ -146,6 +156,9 @@ export class MuseumMultiplayerClient {
           break
         case 'gallery_sync':
           this.callbacks.onGallerySync(message.payload.uploadedImages, message.payload.changedBy)
+          break
+        case 'station_sync':
+          this.callbacks.onStationSync(message.payload.activeStationId, message.payload.changedBy)
           break
         case 'error':
           this.callbacks.onError(message.payload.message)

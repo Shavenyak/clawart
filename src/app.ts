@@ -1,4 +1,5 @@
 import * as THREE from 'three'
+import { getMusicStation } from './audio/musicStations'
 import { resolveMovement } from './controls/movement'
 import { WALL_TEMPLATES } from './data/layouts'
 import {
@@ -11,7 +12,12 @@ import { clearGalleryState, restoreGalleryState, saveGalleryState } from './gall
 import { loadUserImages } from './gallery/uploads'
 import { MuseumMultiplayerClient } from './multiplayer/client'
 import { resolveMultiplayerUrl, resolveRoomId } from './multiplayer/config'
-import type { ConnectionState, PlayerPoseState, RemotePlayerState } from './multiplayer/types'
+import type {
+  ConnectionState,
+  PlayerPoseState,
+  RemotePlayerState,
+  RoomSnapshot,
+} from './multiplayer/types'
 import { createPlayerAvatar, type PlayerAvatar } from './player/createPlayerAvatar'
 import {
   buildMuseumRoom,
@@ -82,6 +88,7 @@ class MuseumApp {
   private readonly statusCopy: HTMLParagraphElement
   private readonly statusVisitor: HTMLParagraphElement
   private readonly statusSync: HTMLParagraphElement
+  private readonly statusStation: HTMLParagraphElement
   private readonly uploadInput: HTMLInputElement
   private readonly helpDialog: HTMLDialogElement
   private readonly dragGhost: HTMLDivElement
@@ -111,9 +118,14 @@ class MuseumApp {
   private readonly placementMarker = createPlacementMarker()
   private readonly interactiveTileByHitArea = new Map<string, MuseumRoom['interactiveTiles'][number]>()
   private readonly interactiveWallByMesh = new Map<string, InteractiveWallPlane>()
+  private readonly interactiveMusicByHitArea = new Map<
+    string,
+    MuseumRoom['interactiveMusicControls'][number]
+  >()
   private readonly remotePlayers = new Map<string, RemotePlayerRuntime>()
   private readonly roomId = resolveRoomId()
   private readonly multiplayerUrl = resolveMultiplayerUrl()
+  private readonly audio: HTMLAudioElement
 
   private activeImages: GalleryImage[] = []
   private uploadedImages: GalleryImage[] = []
@@ -129,6 +141,8 @@ class MuseumApp {
   private carriedFrame: CarriedFrameState | null = null
   private hoveredItemId: string | null = null
   private hoveredWallId: string | null = null
+  private hoveredStationId: string | null = null
+  private activeStationId: string | null = null
   private cameraYaw = 0
   private cameraPitch = -0.05
   private lastPresenceSyncAt = 0
@@ -152,6 +166,7 @@ class MuseumApp {
     this.statusCopy = getRequiredElement(root, '[data-status-copy]')
     this.statusVisitor = getRequiredElement(root, '[data-status-visitor]')
     this.statusSync = getRequiredElement(root, '[data-status-sync]')
+    this.statusStation = getRequiredElement(root, '[data-status-station]')
     this.uploadInput = getRequiredElement(root, '[data-upload]')
     this.helpDialog = getRequiredElement(root, '[data-help]')
     this.dragGhost = getRequiredElement(root, '[data-drag-ghost]')
@@ -172,6 +187,17 @@ class MuseumApp {
     this.renderer.shadowMap.enabled = true
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap
 
+    this.audio = document.createElement('audio')
+    this.audio.preload = 'none'
+    this.audio.volume = 0.58
+    this.audio.crossOrigin = 'anonymous'
+    this.audio.setAttribute('playsinline', 'true')
+    this.audio.setAttribute('webkit-playsinline', 'true')
+    this.audio.addEventListener('playing', this.handleAudioPlaying)
+    this.audio.addEventListener('waiting', this.handleAudioWaiting)
+    this.audio.addEventListener('stalled', this.handleAudioWaiting)
+    this.audio.addEventListener('error', this.handleAudioError)
+
     this.scene.background = new THREE.Color('#f5eee4')
     this.scene.fog = new THREE.Fog('#fbf6ef', 12, 28)
     this.camera.rotation.order = 'YXZ'
@@ -191,13 +217,14 @@ class MuseumApp {
     this.rebuildRoom()
     this.updateVisitorLabel()
     this.updateSyncLabel()
+    this.updateStationLabel()
     this.bindEvents()
     this.resize()
     this.renderer.setAnimationLoop(this.animate)
     this.setLoading(false)
     this.setStatus(
       'Room prepared',
-      'Choose your visitor name, enter in first person, and aim directly at any frame whenever you want to pick it up and move it.',
+      'Choose your visitor name, enter in first person, move frames freely, and switch the live station from the listening corner whenever you want.',
     )
   }
 
@@ -205,6 +232,7 @@ class MuseumApp {
     const restored = restoreGalleryState(this.roomId)
     this.uploadedImages = restored?.uploadedImages ?? []
     this.playerName = sanitizeName(restored?.playerName ?? '') ?? ''
+    this.activeStationId = getMusicStation(restored?.activeStationId)?.id ?? null
     this.activeImages = mergeGalleryImages(this.placeholders, this.uploadedImages)
     this.tilePlacements = normalizeTilePlacements(
       WALL_TEMPLATES,
@@ -266,7 +294,10 @@ class MuseumApp {
     this.localAvatar.group.position.set(this.playerPosition.x, 0, this.playerPosition.z)
     this.localAvatar.group.visible = this.entered
     this.reticle.hidden = !this.entered || this.isTouchDevice
-    this.reticle.classList.toggle('is-active', Boolean(this.hoveredItemId))
+    this.reticle.classList.toggle(
+      'is-active',
+      Boolean(this.hoveredItemId || this.hoveredStationId),
+    )
     this.reticle.classList.toggle('is-carrying', Boolean(this.carriedFrame))
 
     this.camera.position.set(this.playerPosition.x, CAMERA_EYE_HEIGHT, this.playerPosition.z)
@@ -328,6 +359,7 @@ class MuseumApp {
       disposeObject(this.room.group)
       this.interactiveTileByHitArea.clear()
       this.interactiveWallByMesh.clear()
+      this.interactiveMusicByHitArea.clear()
     }
 
     this.room = buildMuseumRoom(this.activeImages, this.isTouchDevice, this.tilePlacements)
@@ -339,6 +371,10 @@ class MuseumApp {
 
     for (const wall of this.room.interactiveWalls) {
       this.interactiveWallByMesh.set(wall.mesh.uuid, wall)
+    }
+
+    for (const control of this.room.interactiveMusicControls) {
+      this.interactiveMusicByHitArea.set(control.hitArea.uuid, control)
     }
 
     if (!this.entered) {
@@ -425,12 +461,19 @@ class MuseumApp {
     this.setStatus(
       `Welcome, ${nextName}`,
       this.isTouchDevice
-        ? 'Touch mode is live. Tap and drag a frame whenever you want to reposition it on a wall.'
-        : 'First-person mode is live. Mouse look starts automatically, use W A S D to walk, click a frame at the center reticle to pick it up, then click a wall to place it.',
+        ? 'Touch mode is live. Drag frames on the walls whenever you want, and tap the listening corner buttons to switch the live station.'
+        : 'First-person mode is live. Mouse look starts automatically, use W A S D to walk, click a frame at the center reticle to pick it up, and aim at the listening corner buttons to change stations.',
     )
 
     this.requestDesktopPointerLock()
     this.connectMultiplayer()
+
+    if (this.activeStationId) {
+      void this.activateStation(this.activeStationId, {
+        sync: false,
+        announce: false,
+      })
+    }
   }
 
   private readonly handleUploadOpen = (): void => {
@@ -551,6 +594,16 @@ class MuseumApp {
       return
     }
 
+    const musicControl = this.pickCenteredMusicControl()
+
+    if (musicControl) {
+      void this.activateStation(musicControl.stationId, {
+        sync: true,
+        announce: true,
+      })
+      return
+    }
+
     const interactiveTile = this.pickCenteredInteractiveTile()
 
     if (!interactiveTile) {
@@ -623,6 +676,16 @@ class MuseumApp {
     }
 
     if (!this.isTouchDevice) {
+      return
+    }
+
+    const musicControl = this.pickInteractiveMusicControl(event)
+
+    if (musicControl) {
+      void this.activateStation(musicControl.stationId, {
+        sync: true,
+        announce: true,
+      })
       return
     }
 
@@ -716,6 +779,7 @@ class MuseumApp {
       this.hideDragGhost()
       this.hoveredItemId = null
       this.hoveredWallId = null
+      this.hoveredStationId = null
       this.carriedFrame = null
 
       if (dropPlacement) {
@@ -752,6 +816,7 @@ class MuseumApp {
     this.carriedFrame = null
     this.hoveredItemId = null
     this.hoveredWallId = null
+    this.hoveredStationId = null
     this.refreshInteractionHighlights()
   }
 
@@ -759,6 +824,7 @@ class MuseumApp {
     if (!this.pointerState) {
       this.hoveredItemId = null
       this.hoveredWallId = null
+      this.hoveredStationId = null
       this.refreshInteractionHighlights()
     }
   }
@@ -781,16 +847,28 @@ class MuseumApp {
     }
 
     if (this.pointerLocked) {
+      const hoveredMusicControl = this.pickCenteredMusicControl()
+
+      if (hoveredMusicControl) {
+        this.hoveredItemId = null
+        this.hoveredWallId = null
+        this.hoveredStationId = hoveredMusicControl.stationId
+        this.refreshInteractionHighlights()
+        return
+      }
+
       const hoveredTile = this.pickCenteredInteractiveTile()
       this.hoveredItemId = hoveredTile?.itemId ?? null
       this.hoveredWallId = null
+      this.hoveredStationId = null
       this.refreshInteractionHighlights()
       return
     }
 
-    if (this.hoveredItemId || this.hoveredWallId) {
+    if (this.hoveredItemId || this.hoveredWallId || this.hoveredStationId) {
       this.hoveredItemId = null
       this.hoveredWallId = null
+      this.hoveredStationId = null
       this.refreshInteractionHighlights()
     }
   }
@@ -808,6 +886,7 @@ class MuseumApp {
     }
     this.hoveredItemId = itemId
     this.hoveredWallId = this.carriedFrame.dropPlacement?.wallId ?? null
+    this.hoveredStationId = null
 
     if (typeof clientX === 'number' && typeof clientY === 'number') {
       this.showDragGhost(this.getTileDragLabel(interactiveTile), clientX, clientY)
@@ -839,6 +918,7 @@ class MuseumApp {
     this.carriedFrame = null
     this.hoveredItemId = null
     this.hoveredWallId = null
+    this.hoveredStationId = null
     this.applyTilePlacement(itemId, dropPlacement)
     this.setStatus('Frame placed', 'That frame is now mounted exactly where you aimed it.')
   }
@@ -904,6 +984,14 @@ class MuseumApp {
             this.applyRemoteUploadedImages(uploadedImages)
           }
         },
+        onStationSync: (activeStationId, changedBy) => {
+          if (changedBy !== this.multiplayerSelfId) {
+            void this.activateStation(activeStationId, {
+              sync: false,
+              announce: false,
+            })
+          }
+        },
         onError: (message) => {
           console.warn(message)
         },
@@ -916,26 +1004,28 @@ class MuseumApp {
       pose: this.getCurrentPose(0),
       uploadedImages: this.uploadedImages,
       tilePlacements: this.tilePlacements,
+      activeStationId: this.activeStationId,
     })
   }
 
-  private applySnapshot(snapshot: {
-    uploadedImages: GalleryImage[]
-    tilePlacements: GalleryTilePlacements
-    players: RemotePlayerState[]
-  }): void {
+  private applySnapshot(snapshot: RoomSnapshot): void {
     this.uploadedImages = snapshot.uploadedImages
     this.activeImages = mergeGalleryImages(this.placeholders, this.uploadedImages)
     this.tilePlacements = normalizeTilePlacements(WALL_TEMPLATES, snapshot.tilePlacements)
     this.persistState()
     this.rebuildRoom()
     this.syncRemotePlayers(snapshot.players)
+    void this.activateStation(snapshot.activeStationId, {
+      sync: false,
+      announce: false,
+    })
   }
 
   private applyRemoteTilePlacements(tilePlacements: GalleryTilePlacements): void {
     this.carriedFrame = null
     this.hoveredItemId = null
     this.hoveredWallId = null
+    this.hoveredStationId = null
     this.hideDragGhost()
     this.tilePlacements = normalizeTilePlacements(WALL_TEMPLATES, tilePlacements)
     this.persistState()
@@ -1059,6 +1149,88 @@ class MuseumApp {
     }
   }
 
+  private readonly handleAudioPlaying = (): void => {
+    const station = getMusicStation(this.activeStationId)
+    if (!station) {
+      return
+    }
+
+    this.statusStation.textContent = `Now playing: ${station.label} | ${station.genre}`
+    this.statusStation.classList.add('is-live')
+  }
+
+  private readonly handleAudioWaiting = (): void => {
+    const station = getMusicStation(this.activeStationId)
+    if (!station) {
+      return
+    }
+
+    this.statusStation.textContent = `Tuning: ${station.label}`
+    this.statusStation.classList.remove('is-live')
+  }
+
+  private readonly handleAudioError = (): void => {
+    const station = getMusicStation(this.activeStationId)
+    const stationLabel = station?.label ?? 'live radio'
+    this.statusStation.textContent = `Radio unavailable: ${stationLabel}`
+    this.statusStation.classList.remove('is-live')
+  }
+
+  private async activateStation(
+    stationId: string | null,
+    options: {
+      sync: boolean
+      announce: boolean
+    },
+  ): Promise<void> {
+    const station = getMusicStation(stationId)
+
+    if (!station) {
+      this.audio.pause()
+      this.audio.removeAttribute('src')
+      this.audio.load()
+      this.activeStationId = null
+      this.persistState()
+      this.updateStationLabel()
+      this.refreshInteractionHighlights()
+      return
+    }
+
+    const previousStationId = this.activeStationId
+    const previousSrc = this.audio.src
+    this.activeStationId = station.id
+    this.persistState()
+    this.updateStationLabel(`Tuning: ${station.label}`)
+    this.refreshInteractionHighlights()
+
+    const shouldReplaceSource =
+      previousStationId !== station.id || !previousSrc.includes(station.streamUrl)
+
+    if (shouldReplaceSource) {
+      this.audio.pause()
+      this.audio.src = station.streamUrl
+      this.audio.load()
+    }
+
+    try {
+      await this.audio.play()
+    } catch {
+      this.statusStation.textContent = `Ready: ${station.label} | click the station again if audio is blocked`
+      this.statusStation.classList.remove('is-live')
+    }
+
+    if (options.sync) {
+      this.multiplayerClient?.updateActiveStationId(station.id)
+    }
+
+    if (options.announce) {
+      this.setStatus(
+        'Station changed',
+        `${station.label} is selected at the listening corner. Everyone in this room will hear the same station once playback starts on their device.`,
+      )
+    }
+  }
+
   private jumpToHotspot(hotspot: MuseumHotspot): void {
     this.playerPosition.set(hotspot.pose.position.x, 0, hotspot.pose.position.z)
     this.cameraYaw = hotspot.pose.yaw
@@ -1108,6 +1280,50 @@ class MuseumApp {
       const tile = this.interactiveTileByHitArea.get(intersection.object.uuid)
       if (tile) {
         return tile
+      }
+    }
+
+    return null
+  }
+
+  private pickInteractiveMusicControl(
+    event: PointerEvent,
+  ): MuseumRoom['interactiveMusicControls'][number] | null {
+    if (!this.room) {
+      return null
+    }
+
+    this.updatePointerFromEvent(event)
+    return this.pickInteractiveMusicControlFromCurrentPointer()
+  }
+
+  private pickCenteredMusicControl(): MuseumRoom['interactiveMusicControls'][number] | null {
+    if (!this.room) {
+      return null
+    }
+
+    this.pointer.set(0, 0)
+    return this.pickInteractiveMusicControlFromCurrentPointer()
+  }
+
+  private pickInteractiveMusicControlFromCurrentPointer():
+    | MuseumRoom['interactiveMusicControls'][number]
+    | null {
+    if (!this.room) {
+      return null
+    }
+
+    this.raycaster.setFromCamera(this.pointer, this.camera)
+
+    const intersections = this.raycaster.intersectObjects(
+      this.room.interactiveMusicControls.map((control) => control.hitArea),
+      false,
+    )
+
+    for (const intersection of intersections) {
+      const control = this.interactiveMusicByHitArea.get(intersection.object.uuid)
+      if (control) {
+        return control
       }
     }
 
@@ -1223,6 +1439,16 @@ class MuseumApp {
       const material = wall.mesh.material as THREE.MeshBasicMaterial
       material.opacity = !this.carriedFrame ? 0 : wall.wallId === this.hoveredWallId ? 0.1 : 0.02
     }
+
+    for (const control of this.room.interactiveMusicControls) {
+      const isActive = control.stationId === this.activeStationId
+      const isHovered = control.stationId === this.hoveredStationId
+      control.halo.visible = isActive || isHovered
+      control.haloMaterial.opacity = isActive ? 0.3 : 0.16
+      control.buttonMaterial.color.set(isActive ? '#fffaf4' : isHovered ? '#f6ede4' : '#efe2d4')
+      control.buttonMaterial.emissive.set(isActive || isHovered ? control.accentColor : '#170d10')
+      control.buttonMaterial.emissiveIntensity = isActive ? 0.92 : isHovered ? 0.48 : 0.14
+    }
   }
 
   private updateTouchHotspots(now: number): void {
@@ -1237,6 +1463,7 @@ class MuseumApp {
   }
 
   private readonly handleBeforeUnload = (): void => {
+    this.audio.pause()
     this.multiplayerClient?.disconnect()
   }
 
@@ -1258,6 +1485,25 @@ class MuseumApp {
         this.statusSync.textContent = `Room: ${this.roomId} · Solo mode`
         break
     }
+  }
+
+  private updateStationLabel(overrideText?: string): void {
+    if (overrideText) {
+      this.statusStation.textContent = overrideText
+      this.statusStation.classList.remove('is-live')
+      return
+    }
+
+    const station = getMusicStation(this.activeStationId)
+
+    if (!station) {
+      this.statusStation.textContent = 'Radio: Walk to the listening corner and pick a live station'
+      this.statusStation.classList.remove('is-live')
+      return
+    }
+
+    this.statusStation.textContent = `Radio selected: ${station.label} | ${station.genre}`
+    this.statusStation.classList.remove('is-live')
   }
 
   private showDragGhost(label: string, clientX: number, clientY: number): void {
@@ -1282,12 +1528,14 @@ class MuseumApp {
       uploadedImages: this.uploadedImages,
       playerName: this.playerName || undefined,
       tilePlacements: this.tilePlacements,
+      activeStationId: this.activeStationId ?? undefined,
     }
 
     if (
       state.uploadedImages.length === 0 &&
       !state.playerName &&
-      isDefaultTilePlacements(this.tilePlacements)
+      isDefaultTilePlacements(this.tilePlacements) &&
+      !state.activeStationId
     ) {
       clearGalleryState(this.roomId)
       return
@@ -1358,7 +1606,7 @@ function createShellMarkup({
           <div class="brand-copy">
             <p class="brand-kicker">Mixtiles.com</p>
             <h1 class="brand-title">Welcome to Mixtiles Gallery!</h1>
-            <p class="brand-sub">Enter the room and drop straight into first-person control. Select a frame, then use the pink wall target to place it exactly where you want.</p>
+            <p class="brand-sub">Enter the room in first person, rearrange frames freely, and walk to the listening corner to switch the live room soundtrack.</p>
           </div>
         </div>
 
@@ -1373,7 +1621,7 @@ function createShellMarkup({
       <section class="hero-panel" data-hero>
         <p class="eyebrow">Interactive Room</p>
         <h2 class="hero-title">Choose your name, then walk the museum in first person.</h2>
-        <p class="hero-copy">You stay in the room like a Doom-style first-person visitor. Select a frame, mark the exact wall point you want, and place it there.</p>
+        <p class="hero-copy">You stay in the room like a Doom-style first-person visitor. Rearrange frames on the walls and use the retro listening corner to switch between live radio genres.</p>
 
         <form class="hero-form" data-name-form>
           <label class="field-stack">
@@ -1393,8 +1641,8 @@ function createShellMarkup({
           <p class="hero-note">
             ${
               isTouchDevice
-                ? 'Touch: drag to look, tap floor markers to jump viewpoints, and drag any frame directly to a new wall position whenever you want.'
-                : 'Desktop: entering the gallery starts mouse look automatically, use W A S D to walk, click a frame to mark it, then use the pink wall target and click again to place it.'
+                ? 'Touch: drag to look, tap floor markers to jump viewpoints, drag any frame directly to a new wall position, and tap the listening corner buttons to switch stations.'
+                : 'Desktop: entering the gallery starts mouse look automatically, use W A S D to walk, click a frame to mark it, then aim at the listening corner buttons whenever you want to change stations.'
             }
           </p>
 
@@ -1411,6 +1659,7 @@ function createShellMarkup({
         <p class="status-copy" data-status-copy>Choose your visitor name, then enter the museum.</p>
         <p class="status-visitor" data-status-visitor>Visitor: Guest</p>
         <p class="status-sync" data-status-sync>Room: ${escapeHtml(roomId)} · Solo mode</p>
+        <p class="status-station" data-status-station>Radio: Walk to the listening corner and pick a live station</p>
       </aside>
 
       <input class="upload-input" data-upload type="file" accept="image/*" multiple />
@@ -1422,13 +1671,14 @@ function createShellMarkup({
       <dialog class="help-dialog" data-help>
         <div class="help-shell">
           <h2>How the room works</h2>
-          <p>The room stays in first person the whole time. Frame rearranging is always available, so you never need to switch modes.</p>
+          <p>The room stays in first person the whole time. Frame rearranging and station switching are always available, so you never need to switch modes.</p>
           <ul class="help-list">
             <li>Enter the room with your visitor name. That name is ready for future shared sessions when more players join.</li>
             <li>Desktop walk mode: entering the gallery locks mouse look automatically, and pressing Esc frees the cursor again.</li>
             <li>Touch walk mode: drag to look and tap the glowing floor markers to jump viewpoints.</li>
             <li>Desktop frame move: aim the center reticle at a frame, click once to mark it, then click again while the pink target sits on the wall point where you want it.</li>
             <li>Touch frame move: press directly on a frame, drag it over any wall surface, and release to mount it at that exact spot.</li>
+            <li>Listening corner: walk to the retro console in the corner and click any station button to switch the shared room music.</li>
             <li>Upload Photos swaps in your own images while keeping your current wall arrangement.</li>
           </ul>
           <button type="button" class="dialog-close" data-help-close>Close</button>

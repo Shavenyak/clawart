@@ -24,6 +24,7 @@ describe('gallery persistence', () => {
           y: -0.2,
         },
       },
+      activeStationId: 'radio-rock',
     }, 'family-room')
 
     expect(restoreGalleryState('family-room')).toEqual({
@@ -43,6 +44,7 @@ describe('gallery persistence', () => {
           y: -0.2,
         },
       },
+      activeStationId: 'radio-rock',
     })
   })
 
