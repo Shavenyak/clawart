@@ -70,6 +70,26 @@ describe('gallery arrangement helpers', () => {
     )
   })
 
+  it('lets specific tiles override their assigned image without disturbing the rest of the wall', () => {
+    const walls = buildGalleryWalls(
+      templates,
+      images,
+      createDefaultTilePlacements(templates),
+      {
+        'slot-b': {
+          id: 'custom-upload',
+          label: 'Custom Portrait',
+          source: 'upload',
+          textureUrl: 'data:custom',
+          orientation: 'portrait',
+        },
+      },
+    )
+
+    expect(walls[0].tiles.find((tile) => tile.id === 'slot-b')?.imageId).toBe('custom-upload')
+    expect(walls[0].tiles.find((tile) => tile.id === 'slot-a')?.imageId).toBe('landscape')
+  })
+
   it('normalizes invalid placements back to defaults', () => {
     expect(
       normalizeTilePlacements(templates, {

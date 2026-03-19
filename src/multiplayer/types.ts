@@ -1,4 +1,13 @@
-import type { GalleryImage, GalleryTilePlacements } from '../types'
+import type {
+  GalleryImage,
+  GalleryTileImageAssignments,
+  GalleryTilePlacements,
+} from '../types'
+
+export interface SharedGalleryState {
+  uploadedImages: GalleryImage[]
+  tileImageAssignments: GalleryTileImageAssignments
+}
 
 export interface PlayerPoseState {
   x: number
@@ -17,6 +26,7 @@ export interface RemotePlayerState {
 export interface RoomSnapshot {
   uploadedImages: GalleryImage[]
   tilePlacements: GalleryTilePlacements
+  tileImageAssignments: GalleryTileImageAssignments
   activeStationId: string | null
   players: RemotePlayerState[]
 }
@@ -27,6 +37,7 @@ export interface JoinPayload {
   pose: PlayerPoseState
   uploadedImages: GalleryImage[]
   tilePlacements: GalleryTilePlacements
+  tileImageAssignments: GalleryTileImageAssignments
   activeStationId: string | null
 }
 
@@ -45,7 +56,7 @@ export type ClientToServerMessage =
     }
   | {
       type: 'gallery_sync'
-      payload: GalleryImage[]
+      payload: SharedGalleryState
     }
   | {
       type: 'station_sync'
@@ -87,7 +98,7 @@ export type ServerToClientMessage =
   | {
       type: 'gallery_sync'
       payload: {
-        uploadedImages: GalleryImage[]
+        gallery: SharedGalleryState
         changedBy: string
       }
     }

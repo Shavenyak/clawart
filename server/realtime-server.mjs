@@ -169,6 +169,13 @@ function handleJoin(socket, payload) {
     room.uploadedImages = Array.isArray(payload.uploadedImages) ? payload.uploadedImages : []
   }
 
+  if (!room.tileImageAssignments || Object.keys(room.tileImageAssignments).length === 0) {
+    room.tileImageAssignments =
+      payload.tileImageAssignments && typeof payload.tileImageAssignments === 'object'
+        ? payload.tileImageAssignments
+        : {}
+  }
+
   if (typeof room.activeStationId === 'undefined') {
     room.activeStationId =
       typeof payload.activeStationId === 'string' && payload.activeStationId.trim().length > 0
@@ -184,6 +191,7 @@ function handleJoin(socket, payload) {
       snapshot: {
         uploadedImages: room.uploadedImages,
         tilePlacements: room.tilePlacements,
+        tileImageAssignments: room.tileImageAssignments,
         activeStationId: room.activeStationId ?? null,
         players: Array.from(room.players.values()),
       },
@@ -249,21 +257,28 @@ function handleTileSync(socket, tilePlacements) {
   )
 }
 
-function handleGallerySync(socket, uploadedImages) {
+function handleGallerySync(socket, payload) {
   const room = getRoomForSocket(socket)
 
   if (!room) {
     return
   }
 
-  room.uploadedImages = Array.isArray(uploadedImages) ? uploadedImages : []
+  room.uploadedImages = Array.isArray(payload?.uploadedImages) ? payload.uploadedImages : []
+  room.tileImageAssignments =
+    payload?.tileImageAssignments && typeof payload.tileImageAssignments === 'object'
+      ? payload.tileImageAssignments
+      : {}
 
   broadcastToRoom(
     room,
     {
       type: 'gallery_sync',
       payload: {
-        uploadedImages: room.uploadedImages,
+        gallery: {
+          uploadedImages: room.uploadedImages,
+          tileImageAssignments: room.tileImageAssignments,
+        },
         changedBy: socket.data.clientId,
       },
     },
@@ -327,6 +342,7 @@ function getOrCreateRoom(roomId) {
     id: roomId,
     uploadedImages: [],
     tilePlacements: {},
+    tileImageAssignments: {},
     activeStationId: null,
     players: new Map(),
   }

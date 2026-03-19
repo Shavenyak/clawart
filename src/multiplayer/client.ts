@@ -1,4 +1,4 @@
-import type { GalleryImage, GalleryTilePlacements } from '../types'
+import type { GalleryImage, GalleryTileImageAssignments, GalleryTilePlacements } from '../types'
 import type {
   ClientToServerMessage,
   ConnectionState,
@@ -16,7 +16,11 @@ interface MultiplayerClientCallbacks {
   onPlayerPresence: (player: RemotePlayerState) => void
   onPlayerLeft: (playerId: string) => void
   onTileSync: (tilePlacements: GalleryTilePlacements, changedBy: string) => void
-  onGallerySync: (uploadedImages: GalleryImage[], changedBy: string) => void
+  onGallerySync: (
+    uploadedImages: GalleryImage[],
+    tileImageAssignments: GalleryTileImageAssignments,
+    changedBy: string,
+  ) => void
   onStationSync: (activeStationId: string | null, changedBy: string) => void
   onError: (message: string) => void
 }
@@ -73,10 +77,16 @@ export class MuseumMultiplayerClient {
     })
   }
 
-  updateGalleryImages(uploadedImages: GalleryImage[]): void {
+  updateGalleryImages(
+    uploadedImages: GalleryImage[],
+    tileImageAssignments: GalleryTileImageAssignments,
+  ): void {
     this.send({
       type: 'gallery_sync',
-      payload: uploadedImages,
+      payload: {
+        uploadedImages,
+        tileImageAssignments,
+      },
     })
   }
 
@@ -155,7 +165,11 @@ export class MuseumMultiplayerClient {
           this.callbacks.onTileSync(message.payload.tilePlacements, message.payload.changedBy)
           break
         case 'gallery_sync':
-          this.callbacks.onGallerySync(message.payload.uploadedImages, message.payload.changedBy)
+          this.callbacks.onGallerySync(
+            message.payload.gallery.uploadedImages,
+            message.payload.gallery.tileImageAssignments,
+            message.payload.changedBy,
+          )
           break
         case 'station_sync':
           this.callbacks.onStationSync(message.payload.activeStationId, message.payload.changedBy)

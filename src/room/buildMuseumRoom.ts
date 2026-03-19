@@ -17,6 +17,7 @@ import { MUSIC_STATIONS } from '../audio/musicStations'
 import type {
   CameraPose,
   GalleryImage,
+  GalleryTileImageAssignments,
   GalleryTilePlacements,
   GalleryWall,
   Viewpoint,
@@ -62,11 +63,13 @@ export function buildMuseumRoom(
   images: GalleryImage[],
   isTouchDevice: boolean,
   tilePlacements?: GalleryTilePlacements,
+  tileImageAssignments: GalleryTileImageAssignments = {},
 ): MuseumRoom {
   const group = new THREE.Group()
   group.name = 'museum-room'
 
-  const galleryWalls = buildGalleryWalls(WALL_TEMPLATES, images, tilePlacements)
+  const galleryWalls = buildGalleryWalls(WALL_TEMPLATES, images, tilePlacements, tileImageAssignments)
+  const allRenderableImages = [...images, ...Object.values(tileImageAssignments)]
   const interactiveTiles: InteractiveGalleryTile[] = []
   const interactiveWalls = WALL_TEMPLATES.map((wall) => createInteractiveWallPlane(wall))
   const musicCorner = createMusicCorner(MUSIC_STATIONS)
@@ -76,7 +79,7 @@ export function buildMuseumRoom(
   group.add(musicCorner.group)
 
   for (const wall of galleryWalls) {
-    const renderedWall = createGalleryWall(wall, images, MUSEUM_THEME)
+    const renderedWall = createGalleryWall(wall, allRenderableImages, MUSEUM_THEME)
     group.add(renderedWall.group)
     interactiveTiles.push(...renderedWall.interactiveTiles)
   }

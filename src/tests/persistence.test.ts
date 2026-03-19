@@ -24,6 +24,15 @@ describe('gallery persistence', () => {
           y: -0.2,
         },
       },
+      tileImageAssignments: {
+        'slot-a': {
+          id: 'upload-frame-1',
+          label: 'Targeted Frame',
+          source: 'upload',
+          textureUrl: 'data:image/jpeg;base64,frame',
+          orientation: 'square',
+        },
+      },
       activeStationId: 'radio-rock',
     }, 'family-room')
 
@@ -42,6 +51,15 @@ describe('gallery persistence', () => {
           wallId: 'north',
           x: 1.4,
           y: -0.2,
+        },
+      },
+      tileImageAssignments: {
+        'slot-a': {
+          id: 'upload-frame-1',
+          label: 'Targeted Frame',
+          source: 'upload',
+          textureUrl: 'data:image/jpeg;base64,frame',
+          orientation: 'square',
         },
       },
       activeStationId: 'radio-rock',

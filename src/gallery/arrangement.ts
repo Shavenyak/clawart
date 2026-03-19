@@ -3,6 +3,7 @@ import type {
   GalleryImage,
   GallerySlotAssignments,
   GalleryTile,
+  GalleryTileImageAssignments,
   GalleryTilePlacement,
   GalleryTilePlacements,
   GalleryWall,
@@ -35,12 +36,14 @@ export function buildGalleryWalls(
   templates: GalleryWallTemplate[],
   images: GalleryImage[],
   tilePlacements: GalleryTilePlacements = createDefaultTilePlacements(templates),
+  tileImageAssignments: GalleryTileImageAssignments = {},
 ): GalleryWall[] {
   const assignedWalls = mapImagesToWalls(templates, images)
   const placements = normalizeTilePlacements(templates, tilePlacements)
   const items = assignedWalls.flatMap((wall) =>
     wall.tiles.map((tile) => ({
       ...tile,
+      imageId: tileImageAssignments[tile.id]?.id ?? tile.imageId,
       wallId: wall.wallId,
     })),
   )

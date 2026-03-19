@@ -87,6 +87,7 @@ export interface Viewpoint {
 }
 
 export type GallerySlotAssignments = Record<string, string>
+export type GalleryTileImageAssignments = Record<string, GalleryImage>
 
 export interface GalleryTilePlacement {
   wallId: string
@@ -101,5 +102,6 @@ export interface GalleryState {
   playerName?: string
   slotAssignments?: GallerySlotAssignments
   tilePlacements?: GalleryTilePlacements
+  tileImageAssignments?: GalleryTileImageAssignments
   activeStationId?: string
 }

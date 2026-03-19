@@ -28,6 +28,7 @@ import {
 import type {
   GalleryImage,
   GalleryState,
+  GalleryTileImageAssignments,
   GalleryTilePlacement,
   GalleryTilePlacements,
 } from './types'
@@ -90,6 +91,7 @@ class MuseumApp {
   private readonly statusSync: HTMLParagraphElement
   private readonly statusStation: HTMLParagraphElement
   private readonly uploadInput: HTMLInputElement
+  private readonly frameUploadInput: HTMLInputElement
   private readonly helpDialog: HTMLDialogElement
   private readonly dragGhost: HTMLDivElement
   private readonly dragGhostLabel: HTMLSpanElement
@@ -129,6 +131,7 @@ class MuseumApp {
 
   private activeImages: GalleryImage[] = []
   private uploadedImages: GalleryImage[] = []
+  private tileImageAssignments: GalleryTileImageAssignments = {}
   private room: MuseumRoom | null = null
   private multiplayerClient: MuseumMultiplayerClient | null = null
   private multiplayerSelfId: string | null = null
@@ -143,6 +146,7 @@ class MuseumApp {
   private hoveredWallId: string | null = null
   private hoveredStationId: string | null = null
   private activeStationId: string | null = null
+  private pendingFrameUploadItemId: string | null = null
   private cameraYaw = 0
   private cameraPitch = -0.05
   private lastPresenceSyncAt = 0
@@ -168,6 +172,7 @@ class MuseumApp {
     this.statusSync = getRequiredElement(root, '[data-status-sync]')
     this.statusStation = getRequiredElement(root, '[data-status-station]')
     this.uploadInput = getRequiredElement(root, '[data-upload]')
+    this.frameUploadInput = getRequiredElement(root, '[data-upload-frame]')
     this.helpDialog = getRequiredElement(root, '[data-help]')
     this.dragGhost = getRequiredElement(root, '[data-drag-ghost]')
     this.dragGhostLabel = getRequiredElement(root, '[data-drag-ghost-label]')
@@ -233,6 +238,7 @@ class MuseumApp {
     this.uploadedImages = restored?.uploadedImages ?? []
     this.playerName = sanitizeName(restored?.playerName ?? '') ?? ''
     this.activeStationId = getMusicStation(restored?.activeStationId)?.id ?? null
+    this.tileImageAssignments = restored?.tileImageAssignments ?? {}
     this.activeImages = mergeGalleryImages(this.placeholders, this.uploadedImages)
     this.tilePlacements = normalizeTilePlacements(
       WALL_TEMPLATES,
@@ -257,6 +263,7 @@ class MuseumApp {
       this.handleReset,
     )
     this.uploadInput.addEventListener('change', this.handleUploadInput)
+    this.frameUploadInput.addEventListener('change', this.handleFrameUploadInput)
     this.openHelpButtons.forEach((button) => button.addEventListener('click', this.handleOpenHelp))
     getRequiredElement<HTMLButtonElement>(this.root, '[data-help-close]').addEventListener(
       'click',
@@ -277,6 +284,7 @@ class MuseumApp {
     this.canvas.addEventListener('pointerup', this.handlePointerUp)
     this.canvas.addEventListener('pointercancel', this.handlePointerCancel)
     this.canvas.addEventListener('pointerleave', this.handlePointerLeave)
+    this.canvas.addEventListener('contextmenu', this.handleCanvasContextMenu)
   }
 
   private readonly animate = (): void => {
@@ -362,7 +370,12 @@ class MuseumApp {
       this.interactiveMusicByHitArea.clear()
     }
 
-    this.room = buildMuseumRoom(this.activeImages, this.isTouchDevice, this.tilePlacements)
+    this.room = buildMuseumRoom(
+      this.activeImages,
+      this.isTouchDevice,
+      this.tilePlacements,
+      this.tileImageAssignments,
+    )
     this.scene.add(this.room.group)
 
     for (const tile of this.room.interactiveTiles) {
@@ -462,7 +475,7 @@ class MuseumApp {
       `Welcome, ${nextName}`,
       this.isTouchDevice
         ? 'Touch mode is live. Drag frames on the walls whenever you want, and tap the listening corner buttons to switch the live station.'
-        : 'First-person mode is live. Mouse look starts automatically, use W A S D to walk, click a frame at the center reticle to pick it up, and aim at the listening corner buttons to change stations.',
+        : 'First-person mode is live. Mouse look starts automatically, use W A S D to walk, right-click a frame to replace that exact photo, and aim at the listening corner buttons to change or stop stations.',
     )
 
     this.requestDesktopPointerLock()
@@ -477,6 +490,7 @@ class MuseumApp {
   }
 
   private readonly handleUploadOpen = (): void => {
+    this.pendingFrameUploadItemId = null
     this.uploadInput.click()
   }
 
@@ -499,7 +513,7 @@ class MuseumApp {
       this.tilePlacements = normalizeTilePlacements(WALL_TEMPLATES, this.tilePlacements)
       this.persistState()
       this.rebuildRoom()
-      this.multiplayerClient?.updateGalleryImages(this.uploadedImages)
+      this.syncGalleryImages()
       this.setStatus(
         'Photos updated',
         `${this.uploadedImages.length} image${this.uploadedImages.length === 1 ? '' : 's'} placed into the room.`,
@@ -514,17 +528,60 @@ class MuseumApp {
     }
   }
 
+  private readonly handleFrameUploadInput = async (): Promise<void> => {
+    const files = this.frameUploadInput.files
+    const targetItemId = this.pendingFrameUploadItemId
+
+    if (!files || files.length === 0 || !targetItemId) {
+      this.frameUploadInput.value = ''
+      this.pendingFrameUploadItemId = null
+      return
+    }
+
+    this.setLoading(true)
+    this.setStatus('Updating frame', 'Cropping and fitting your photo into that exact frame.')
+
+    try {
+      const [uploadedImage] = await loadUserImages([files[0]])
+
+      if (!uploadedImage) {
+        throw new Error('No image could be prepared for that frame.')
+      }
+
+      this.tileImageAssignments = {
+        ...this.tileImageAssignments,
+        [targetItemId]: uploadedImage,
+      }
+      this.persistState()
+      this.rebuildRoom()
+      this.syncGalleryImages()
+      this.setStatus(
+        'Frame updated',
+        `That frame now shows "${uploadedImage.label}".`,
+      )
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : 'Unable to update that frame.'
+      this.setStatus('Frame upload failed', message)
+    } finally {
+      this.frameUploadInput.value = ''
+      this.pendingFrameUploadItemId = null
+      this.setLoading(false)
+    }
+  }
+
   private readonly handleReset = (): void => {
     this.uploadedImages = []
     this.activeImages = [...this.placeholders]
     this.tilePlacements = createDefaultTilePlacements(WALL_TEMPLATES)
+    this.tileImageAssignments = {}
     this.persistState()
     this.rebuildRoom()
-    this.multiplayerClient?.updateGalleryImages([])
+    this.syncGalleryImages()
     this.multiplayerClient?.updateTilePlacements(this.tilePlacements)
     this.setStatus(
       'Gallery reset',
-      'All uploads and custom frame positions are reset to the curated default room.',
+      'All uploads, targeted frame photos, and custom frame positions are reset to the curated default room.',
     )
   }
 
@@ -552,6 +609,7 @@ class MuseumApp {
     if (!this.pointerLocked && !this.isTouchDevice) {
       this.hoveredItemId = null
       this.hoveredWallId = null
+      this.hoveredStationId = null
 
       if (this.carriedFrame) {
         this.carriedFrame = null
@@ -564,6 +622,30 @@ class MuseumApp {
 
       this.refreshInteractionHighlights()
     }
+  }
+
+  private readonly handleCanvasContextMenu = (event: MouseEvent): void => {
+    if (!this.entered || this.isTouchDevice) {
+      return
+    }
+
+    event.preventDefault()
+
+    if (!this.pointerLocked) {
+      return
+    }
+
+    const interactiveTile = this.pickCenteredInteractiveTile()
+
+    if (!interactiveTile) {
+      this.setStatus(
+        'Aim at a frame',
+        'Right-click while the center reticle is directly on a frame to upload a photo into that exact spot.',
+      )
+      return
+    }
+
+    this.openFrameUploadForItem(interactiveTile.itemId)
   }
 
   private readonly handleMouseMove = (event: MouseEvent): void => {
@@ -676,6 +758,26 @@ class MuseumApp {
     }
 
     if (!this.isTouchDevice) {
+      if (event.button === 2) {
+        event.preventDefault()
+
+        if (!this.pointerLocked) {
+          return
+        }
+
+        const interactiveTile = this.pickCenteredInteractiveTile()
+
+        if (!interactiveTile) {
+          this.setStatus(
+            'Aim at a frame',
+            'Right-click while the center reticle is directly on a frame to upload a photo into that exact spot.',
+          )
+          return
+        }
+
+        this.openFrameUploadForItem(interactiveTile.itemId)
+      }
+
       return
     }
 
@@ -979,9 +1081,9 @@ class MuseumApp {
             this.applyRemoteTilePlacements(tilePlacements)
           }
         },
-        onGallerySync: (uploadedImages, changedBy) => {
+        onGallerySync: (uploadedImages, tileImageAssignments, changedBy) => {
           if (changedBy !== this.multiplayerSelfId) {
-            this.applyRemoteUploadedImages(uploadedImages)
+            this.applyRemoteGalleryImages(uploadedImages, tileImageAssignments)
           }
         },
         onStationSync: (activeStationId, changedBy) => {
@@ -1004,6 +1106,7 @@ class MuseumApp {
       pose: this.getCurrentPose(0),
       uploadedImages: this.uploadedImages,
       tilePlacements: this.tilePlacements,
+      tileImageAssignments: this.tileImageAssignments,
       activeStationId: this.activeStationId,
     })
   }
@@ -1012,6 +1115,7 @@ class MuseumApp {
     this.uploadedImages = snapshot.uploadedImages
     this.activeImages = mergeGalleryImages(this.placeholders, this.uploadedImages)
     this.tilePlacements = normalizeTilePlacements(WALL_TEMPLATES, snapshot.tilePlacements)
+    this.tileImageAssignments = snapshot.tileImageAssignments
     this.persistState()
     this.rebuildRoom()
     this.syncRemotePlayers(snapshot.players)
@@ -1032,9 +1136,13 @@ class MuseumApp {
     this.rebuildRoom()
   }
 
-  private applyRemoteUploadedImages(uploadedImages: GalleryImage[]): void {
+  private applyRemoteGalleryImages(
+    uploadedImages: GalleryImage[],
+    tileImageAssignments: GalleryTileImageAssignments,
+  ): void {
     this.uploadedImages = uploadedImages
     this.activeImages = mergeGalleryImages(this.placeholders, this.uploadedImages)
+    this.tileImageAssignments = tileImageAssignments
     this.persistState()
     this.rebuildRoom()
   }
@@ -1191,8 +1299,20 @@ class MuseumApp {
       this.audio.load()
       this.activeStationId = null
       this.persistState()
-      this.updateStationLabel()
+      this.updateStationLabel('Radio stopped. Choose another station at the listening corner.')
       this.refreshInteractionHighlights()
+
+      if (options.sync) {
+        this.multiplayerClient?.updateActiveStationId(null)
+      }
+
+      if (options.announce) {
+        this.setStatus(
+          'Music stopped',
+          'The listening corner is quiet now. Pick any station button whenever you want to start it again.',
+        )
+      }
+
       return
     }
 
@@ -1441,7 +1561,8 @@ class MuseumApp {
     }
 
     for (const control of this.room.interactiveMusicControls) {
-      const isActive = control.stationId === this.activeStationId
+      const isActive =
+        control.action === 'station' && control.stationId === this.activeStationId
       const isHovered = control.stationId === this.hoveredStationId
       control.halo.visible = isActive || isHovered
       control.haloMaterial.opacity = isActive ? 0.3 : 0.16
@@ -1519,8 +1640,28 @@ class MuseumApp {
   }
 
   private getTileDragLabel(tile: MuseumRoom['interactiveTiles'][number]): string {
-    const image = this.activeImages.find((entry) => entry.id === tile.imageId)
+    const image =
+      this.tileImageAssignments[tile.itemId] ??
+      this.activeImages.find((entry) => entry.id === tile.imageId)
     return image?.label ?? 'Move frame'
+  }
+
+  private openFrameUploadForItem(itemId: string): void {
+    this.pendingFrameUploadItemId = itemId
+
+    if (this.pointerLocked) {
+      document.exitPointerLock()
+    }
+
+    this.frameUploadInput.click()
+    this.setStatus(
+      'Choose a photo',
+      'Pick one image and I will fit it directly into the frame you targeted.',
+    )
+  }
+
+  private syncGalleryImages(): void {
+    this.multiplayerClient?.updateGalleryImages(this.uploadedImages, this.tileImageAssignments)
   }
 
   private persistState(): void {
@@ -1528,6 +1669,7 @@ class MuseumApp {
       uploadedImages: this.uploadedImages,
       playerName: this.playerName || undefined,
       tilePlacements: this.tilePlacements,
+      tileImageAssignments: this.tileImageAssignments,
       activeStationId: this.activeStationId ?? undefined,
     }
 
@@ -1535,6 +1677,7 @@ class MuseumApp {
       state.uploadedImages.length === 0 &&
       !state.playerName &&
       isDefaultTilePlacements(this.tilePlacements) &&
+      Object.keys(this.tileImageAssignments).length === 0 &&
       !state.activeStationId
     ) {
       clearGalleryState(this.roomId)
@@ -1641,8 +1784,8 @@ function createShellMarkup({
           <p class="hero-note">
             ${
               isTouchDevice
-                ? 'Touch: drag to look, tap floor markers to jump viewpoints, drag any frame directly to a new wall position, and tap the listening corner buttons to switch stations.'
-                : 'Desktop: entering the gallery starts mouse look automatically, use W A S D to walk, click a frame to mark it, then aim at the listening corner buttons whenever you want to change stations.'
+                ? 'Touch: drag to look, tap floor markers to jump viewpoints, drag any frame directly to a new wall position, and tap the listening corner buttons to switch or stop the music.'
+                : 'Desktop: entering the gallery starts mouse look automatically, use W A S D to walk, right-click a frame to replace just that photo, and aim at the listening corner buttons whenever you want to change or stop stations.'
             }
           </p>
 
@@ -1663,6 +1806,7 @@ function createShellMarkup({
       </aside>
 
       <input class="upload-input" data-upload type="file" accept="image/*" multiple />
+      <input class="upload-input" data-upload-frame type="file" accept="image/*" />
 
       <div class="drag-ghost" data-drag-ghost hidden>
         <span class="drag-ghost-label" data-drag-ghost-label>Move frame</span>
@@ -1677,8 +1821,9 @@ function createShellMarkup({
             <li>Desktop walk mode: entering the gallery locks mouse look automatically, and pressing Esc frees the cursor again.</li>
             <li>Touch walk mode: drag to look and tap the glowing floor markers to jump viewpoints.</li>
             <li>Desktop frame move: aim the center reticle at a frame, click once to mark it, then click again while the pink target sits on the wall point where you want it.</li>
+            <li>Desktop frame replace: right-click while aiming directly at a frame to upload one photo into that exact frame without disturbing the rest of the wall.</li>
             <li>Touch frame move: press directly on a frame, drag it over any wall surface, and release to mount it at that exact spot.</li>
-            <li>Listening corner: walk to the retro console in the corner and click any station button to switch the shared room music.</li>
+            <li>Listening corner: walk to the retro console in the corner and click any station button to switch the shared room music, or hit Stop Music to silence it for the whole room.</li>
             <li>Upload Photos swaps in your own images while keeping your current wall arrangement.</li>
           </ul>
           <button type="button" class="dialog-close" data-help-close>Close</button>

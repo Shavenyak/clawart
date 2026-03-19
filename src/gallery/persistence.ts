@@ -1,4 +1,9 @@
-import type { GalleryImage, GalleryState, GalleryTilePlacement } from '../types'
+import type {
+  GalleryImage,
+  GalleryState,
+  GalleryTileImageAssignments,
+  GalleryTilePlacement,
+} from '../types'
 
 const STORAGE_KEY_PREFIX = 'mixtiles-3d-museum/gallery-state'
 
@@ -32,6 +37,9 @@ export function restoreGalleryState(roomId: string = 'local'): GalleryState | nu
         : undefined
     const slotAssignments = isStringRecord(parsed.slotAssignments) ? parsed.slotAssignments : undefined
     const tilePlacements = isPlacementRecord(parsed.tilePlacements) ? parsed.tilePlacements : undefined
+    const tileImageAssignments = isTileImageAssignmentRecord(parsed.tileImageAssignments)
+      ? parsed.tileImageAssignments
+      : undefined
     const activeStationId =
       typeof parsed.activeStationId === 'string' && parsed.activeStationId.trim().length > 0
         ? parsed.activeStationId.trim()
@@ -42,6 +50,7 @@ export function restoreGalleryState(roomId: string = 'local'): GalleryState | nu
       playerName,
       slotAssignments,
       tilePlacements,
+      tileImageAssignments,
       activeStationId,
     }
   } catch {
@@ -115,4 +124,12 @@ function isPlacement(value: unknown): value is GalleryTilePlacement {
     typeof candidate.y === 'number' &&
     Number.isFinite(candidate.y)
   )
+}
+
+function isTileImageAssignmentRecord(value: unknown): value is GalleryTileImageAssignments {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return false
+  }
+
+  return Object.values(value).every(isGalleryImage)
 }

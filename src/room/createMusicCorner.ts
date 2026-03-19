@@ -11,7 +11,8 @@ const cornerPosition = new THREE.Vector3(
 const cornerRotationY = -Math.PI * 0.75
 
 export interface InteractiveMusicControl {
-  stationId: string
+  action: 'station' | 'stop'
+  stationId: string | null
   label: string
   accentColor: string
   hitArea: THREE.Mesh
@@ -210,7 +211,7 @@ function createSpeakerArray(x: number): THREE.Group {
 }
 
 function createStationControls(stations: MusicStation[]): InteractiveMusicControl[] {
-  return stations.map((station, index) => {
+  const stationControls = stations.map((station, index) => {
     const x = -0.42 + index * 0.28
     const buttonMaterial = new THREE.MeshStandardMaterial({
       color: '#efe2d4',
@@ -249,6 +250,7 @@ function createStationControls(stations: MusicStation[]): InteractiveMusicContro
     hitArea.userData.stationId = station.id
 
     return {
+      action: 'station' as const,
       stationId: station.id,
       label: station.label,
       accentColor: station.accentColor,
@@ -259,6 +261,55 @@ function createStationControls(stations: MusicStation[]): InteractiveMusicContro
       haloMaterial,
     }
   })
+
+  const stopMaterial = new THREE.MeshStandardMaterial({
+    color: '#f3e6df',
+    emissive: '#170d10',
+    emissiveIntensity: 0.14,
+    roughness: 0.34,
+    metalness: 0.02,
+  })
+  const stopButton = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.11, 0.044, 24), stopMaterial)
+  stopButton.rotation.x = Math.PI / 2
+  stopButton.position.set(0, 0.17, 0.37)
+  stopButton.castShadow = true
+
+  const stopHaloMaterial = new THREE.MeshBasicMaterial({
+    color: '#eb2371',
+    transparent: true,
+    opacity: 0.16,
+    depthWrite: false,
+    side: THREE.DoubleSide,
+  })
+  const stopHalo = new THREE.Mesh(new THREE.CircleGeometry(0.17, 28), stopHaloMaterial)
+  stopHalo.position.set(0, 0.17, 0.352)
+  stopHalo.visible = false
+
+  const stopHitArea = new THREE.Mesh(
+    new THREE.PlaneGeometry(0.3, 0.24),
+    new THREE.MeshBasicMaterial({
+      transparent: true,
+      opacity: 0,
+      depthWrite: false,
+      side: THREE.DoubleSide,
+    }),
+  )
+  stopHitArea.position.set(0, 0.17, 0.39)
+
+  return [
+    ...stationControls,
+    {
+      action: 'stop',
+      stationId: '__stop__',
+      label: 'Stop Music',
+      accentColor: '#eb2371',
+      hitArea: stopHitArea,
+      button: stopButton,
+      buttonMaterial: stopMaterial,
+      halo: stopHalo,
+      haloMaterial: stopHaloMaterial,
+    },
+  ]
 }
 
 function createLabelTexture(stations: MusicStation[]): THREE.CanvasTexture {
@@ -298,6 +349,12 @@ function createLabelTexture(stations: MusicStation[]): THREE.CanvasTexture {
     context.fillText(station.genre, x + 58, 314)
     context.textAlign = 'center'
   })
+
+  context.fillStyle = '#eb2371'
+  roundRect(context, 328, 368, 368, 82, 28, true)
+  context.fillStyle = '#fff8f4'
+  context.font = '700 28px "Mixtiles Sans", "Trebuchet MS", sans-serif'
+  context.fillText('Stop Music', canvas.width / 2, 417)
 
   const texture = new THREE.CanvasTexture(canvas)
   texture.colorSpace = THREE.SRGBColorSpace

@@ -34,7 +34,9 @@ npm run preview:shared
 - Desktop: entering the room starts mouse look automatically, then use `W A S D` to walk.
 - Mobile: drag to look and tap glowing floor markers to move between viewpoints.
 - Rearranging: select a frame, aim at the exact wall point you want, and place it there. Connected visitors see the same layout updates.
+- Desktop frame replace: right-click while aiming directly at a frame to upload a new photo into that exact frame only.
 - Listening corner: walk to the retro console in the corner and click or tap a station button to switch the room soundtrack for everyone in the same room.
+- Stop Music: the listening corner now includes a shared stop control that silences the room radio for everyone in that room.
 - Uploads: use `Upload Photos` to replace the placeholder images with your own square-cropped gallery set. In a shared room, the active gallery upload set is synced to everyone else in that room.
 
 ## Live station sources
