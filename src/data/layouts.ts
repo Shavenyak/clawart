@@ -55,8 +55,8 @@ export const INTRO_POSES = {
     pitch: -0.04,
   } satisfies CameraPose,
   end: {
-    position: { x: 2.8, y: 1.66, z: -4.1 },
-    yaw: 0.72,
+    position: { x: 0, y: 1.66, z: 4.65 },
+    yaw: Math.PI,
     pitch: -0.05,
   } satisfies CameraPose,
 }
@@ -64,36 +64,36 @@ export const INTRO_POSES = {
 export const VIEWPOINTS: Viewpoint[] = [
   {
     id: 'hero',
-    label: 'Oak Family Wall',
+    label: 'Hero Canvas',
     pose: {
-      position: { x: 2.8, y: 1.66, z: -4.1 },
-      yaw: 0.72,
+      position: { x: 0, y: 1.66, z: 4.65 },
+      yaw: Math.PI,
       pitch: -0.05,
     },
   },
   {
     id: 'east',
-    label: 'Black Frame Wall',
+    label: 'East Canvases',
     pose: {
-      position: { x: 3.7, y: 1.66, z: 0.75 },
+      position: { x: 3.6, y: 1.66, z: 0.8 },
       yaw: Math.PI / 2,
       pitch: -0.04,
     },
   },
   {
     id: 'west',
-    label: 'Photo Tile Grid',
+    label: 'West Canvases',
     pose: {
-      position: { x: -3.7, y: 1.66, z: 0.65 },
+      position: { x: -3.6, y: 1.66, z: 0.8 },
       yaw: -Math.PI / 2,
       pitch: -0.04,
     },
   },
   {
     id: 'south',
-    label: 'White Centerpiece Wall',
+    label: 'South Canvases',
     pose: {
-      position: { x: 0, y: 1.66, z: -2.75 },
+      position: { x: 0, y: 1.66, z: -4.35 },
       yaw: Math.PI,
       pitch: -0.05,
     },
@@ -104,6 +104,15 @@ export const VIEWPOINTS: Viewpoint[] = [
     pose: {
       position: { x: 2.95, y: 1.66, z: 3.45 },
       yaw: 2.38,
+      pitch: -0.08,
+    },
+  },
+  {
+    id: 'atelier',
+    label: 'Sketch Tables',
+    pose: {
+      position: { x: -3.1, y: 1.66, z: 3.2 },
+      yaw: -2.3,
       pitch: -0.08,
     },
   },

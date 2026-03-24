@@ -1,8 +1,8 @@
-# Mixtiles 3D Museum Room
+# ClawArt Canvas Studio
 
-A standalone Three.js prototype for a walkable Mixtiles-style museum room on the web. The room includes curated gallery walls, a cinematic entry sequence, desktop walking controls, mobile viewpoint hotspots, a retro listening corner with live radio presets, shared room sync, live player dolls for connected visitors, and photo uploads that persist in `localStorage` and sync through the active room server.
+A standalone Three.js prototype for a walkable shared painting room on the web. The room includes blank wall canvases, a cinematic first-person entry, desktop walking controls, mobile viewpoint hotspots, a retro listening corner with live radio presets, and multiplayer sync so saved paintings appear for everyone in the same room.
 
-The default room art now uses downloaded local copies of open-license sample family imagery sourced from Wikimedia Commons and U.S. government public-domain sources. Source links are listed in [src/assets/open-license/SOURCES.md](/Users/odedb/OneDrive/Documents/Playground/mixtiles-3d-museum/src/assets/open-license/SOURCES.md). `Upload Photos` still replaces that sample set with a personal gallery.
+Each wall canvas opens a large plain white painting sheet with color swatches, brush tools, clear, and save. The current studio also keeps `Upload Photos` in the codebase for compatibility with existing checks.
 
 ## Run locally
 
@@ -16,10 +16,10 @@ npm run dev
 To join a named shared room, add `?room=your-room-name` to the URL, for example:
 
 ```bash
-http://localhost:5173/?room=family-night
+http://localhost:8787/?room=paint-lab
 ```
 
-Open that same URL in another browser or device on the same network and both visitors will see each other as white mannequin dolls and share the same wall arrangement.
+Open that same URL in another browser or device on the same network and both visitors will see each other as white mannequin dolls and share the same saved canvas updates.
 
 ## Commands
 
@@ -33,11 +33,12 @@ npm run preview:shared
 
 - Desktop: entering the room starts mouse look automatically, then use `W A S D` to walk.
 - Mobile: drag to look and tap glowing floor markers to move between viewpoints.
-- Rearranging: select a frame, aim at the exact wall point you want, and place it there. Connected visitors see the same layout updates.
-- Desktop frame replace: right-click while aiming directly at a frame to upload a new photo into that exact frame only.
+- Painting: click any wall canvas to open a larger plain white sheet, then paint with brush, marker, spray, or eraser.
+- Saving: `Save to Canvas` projects the artwork back to that exact wall canvas for everyone in the room.
+- Clearing: `Clear Sheet` resets the current editor, and `Blank All Canvases` resets the whole room.
 - Listening corner: walk to the retro console in the corner and click or tap a station button to switch the room soundtrack for everyone in the same room.
 - Stop Music: the listening corner now includes a shared stop control that silences the room radio for everyone in that room.
-- Uploads: use `Upload Photos` to replace the placeholder images with your own square-cropped gallery set. In a shared room, the active gallery upload set is synced to everyone else in that room.
+- Uploads: `Upload Photos` remains available for compatibility, though the main experience is the shared canvas studio flow.
 
 ## Live station sources
 
@@ -69,6 +70,6 @@ Recommended flow:
 1. Push this project to GitHub.
 2. In Render, create a new Blueprint or Web Service from that repo.
 3. Render will detect the Docker setup and expose the app publicly.
-4. Share room links like `https://your-render-url.onrender.com/?room=family-night`.
+4. Share room links like `https://your-render-url.onrender.com/?room=paint-lab`.
 
-Everyone opening the same `room` URL joins the same live multiplayer gallery.
+Everyone opening the same `room` URL joins the same live multiplayer studio.

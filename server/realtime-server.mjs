@@ -109,6 +109,9 @@ wss.on('connection', (socket) => {
       case 'station_sync':
         handleStationSync(socket, message.payload)
         break
+      case 'run_control':
+        handleRunControl(socket, message.payload)
+        break
       default:
         send(socket, {
           type: 'error',
@@ -126,7 +129,7 @@ wss.on('connection', (socket) => {
 })
 
 server.listen(port, () => {
-  console.log(`Mixtiles realtime server listening on http://localhost:${port}`)
+  console.log(`ClawArt realtime server listening on http://localhost:${port}`)
 })
 
 async function resolveStaticFile(requestPath) {
@@ -155,6 +158,7 @@ function handleJoin(socket, payload) {
   const player = {
     id: socket.data.clientId,
     name: sanitizeName(payload.name),
+    kind: 'human',
     pose: normalizePose(payload.pose),
   }
 
@@ -176,11 +180,26 @@ function handleJoin(socket, payload) {
         : {}
   }
 
+  if (
+    !room.studioCanvasArtworks ||
+    Object.keys(room.studioCanvasArtworks).length === 0
+  ) {
+    room.studioCanvasArtworks =
+      payload.studioCanvasArtworks && typeof payload.studioCanvasArtworks === 'object'
+        ? payload.studioCanvasArtworks
+        : {}
+  }
+
   if (typeof room.activeStationId === 'undefined') {
     room.activeStationId =
       typeof payload.activeStationId === 'string' && payload.activeStationId.trim().length > 0
         ? payload.activeStationId.trim()
         : null
+  }
+
+  if (!room.truthBoard) {
+    room.objective = normalizeObjective(payload.objective)
+    room.truthBoard = createInitialTruthBoard(room.objective)
   }
 
   send(socket, {
@@ -193,6 +212,8 @@ function handleJoin(socket, payload) {
         tilePlacements: room.tilePlacements,
         tileImageAssignments: room.tileImageAssignments,
         activeStationId: room.activeStationId ?? null,
+        studioCanvasArtworks: room.studioCanvasArtworks ?? {},
+        truthBoard: room.truthBoard,
         players: Array.from(room.players.values()),
       },
     },
@@ -235,6 +256,37 @@ function handlePresence(socket, posePayload) {
   )
 }
 
+function handleRunControl(socket, payload) {
+  const room = getRoomForSocket(socket)
+
+  if (!room) {
+    return
+  }
+
+  const action = payload?.action
+
+  if (action !== 'pause' && action !== 'resume' && action !== 'restart') {
+    return
+  }
+
+  const truthBoard = action === 'restart'
+    ? createInitialTruthBoard(normalizeObjective(payload?.objective))
+    : {
+        ...room.truthBoard,
+        status: action === 'pause' ? 'paused' : 'running',
+      }
+  room.truthBoard = truthBoard
+
+  broadcastToRoom(room, {
+    type: 'board_sync',
+    payload: {
+      truthBoard,
+      changedBy: socket.data.clientId,
+    },
+  })
+
+}
+
 function handleTileSync(socket, tilePlacements) {
   const room = getRoomForSocket(socket)
 
@@ -269,6 +321,10 @@ function handleGallerySync(socket, payload) {
     payload?.tileImageAssignments && typeof payload.tileImageAssignments === 'object'
       ? payload.tileImageAssignments
       : {}
+  room.studioCanvasArtworks =
+    payload?.studioCanvasArtworks && typeof payload.studioCanvasArtworks === 'object'
+      ? payload.studioCanvasArtworks
+      : {}
 
   broadcastToRoom(
     room,
@@ -278,6 +334,7 @@ function handleGallerySync(socket, payload) {
         gallery: {
           uploadedImages: room.uploadedImages,
           tileImageAssignments: room.tileImageAssignments,
+          studioCanvasArtworks: room.studioCanvasArtworks,
         },
         changedBy: socket.data.clientId,
       },
@@ -340,10 +397,13 @@ function getOrCreateRoom(roomId) {
 
   const room = {
     id: roomId,
+    objective: normalizeObjective(),
     uploadedImages: [],
     tilePlacements: {},
     tileImageAssignments: {},
     activeStationId: null,
+    truthBoard: createInitialTruthBoard(),
+    studioCanvasArtworks: {},
     players: new Map(),
   }
   rooms.set(roomId, room)
@@ -418,6 +478,26 @@ function toFiniteNumber(value) {
 
 function createId() {
   return Math.random().toString(36).slice(2, 10)
+}
+
+function normalizeObjective(value) {
+  if (typeof value !== 'string' || value.trim().length === 0) {
+    return 'Create art together on every canvas in the room.'
+  }
+
+  return value.trim().replace(/\s+/g, ' ').slice(0, 120)
+}
+
+function createInitialTruthBoard(objective = normalizeObjective()) {
+  return {
+    objective,
+    phase: 'Studio',
+    leadAgentName: 'Canvas',
+    notes: ['Shared painting room ready.'],
+    conclusion: 'The room is waiting for the next brush stroke.',
+    cycle: 0,
+    status: 'running',
+  }
 }
 
 function writeJson(response, statusCode, payload) {

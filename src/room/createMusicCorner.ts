@@ -329,7 +329,7 @@ function createLabelTexture(stations: MusicStation[]): THREE.CanvasTexture {
   context.fillStyle = '#eb2371'
   context.font = '700 54px "Mixtiles Sans", "Trebuchet MS", sans-serif'
   context.textAlign = 'center'
-  context.fillText('Mixtiles Listening Corner', canvas.width / 2, 110)
+  context.fillText('ClawArt Listening Corner', canvas.width / 2, 110)
 
   context.fillStyle = '#5a3f35'
   context.font = '500 30px "Mixtiles Sans", "Trebuchet MS", sans-serif'

@@ -14,20 +14,27 @@ export interface PlayerAvatar {
   update: (delta: number, speed: number) => void
 }
 
-export function createPlayerAvatar(name: string): PlayerAvatar {
+export function createPlayerAvatar(
+  name: string,
+  options: {
+    accentColor?: string
+  } = {},
+): PlayerAvatar {
   const group = new THREE.Group()
   group.name = 'player-avatar'
 
   const body = new THREE.Group()
   group.add(body)
 
+  const accentColor = options.accentColor ?? '#fffdfb'
+
   const whiteMaterial = new THREE.MeshStandardMaterial({
-    color: '#fffdfb',
+    color: mixHexColors('#fffdfb', accentColor, options.accentColor ? 0.24 : 0),
     roughness: 0.9,
     metalness: 0,
   })
   const softMaterial = new THREE.MeshStandardMaterial({
-    color: '#f2efe9',
+    color: mixHexColors('#f2efe9', accentColor, options.accentColor ? 0.14 : 0),
     roughness: 0.94,
     metalness: 0,
   })
@@ -153,6 +160,13 @@ export function createPlayerAvatar(name: string): PlayerAvatar {
       body.position.y = THREE.MathUtils.lerp(body.position.y, bounce, Math.min(delta * 10, 1))
     },
   }
+}
+
+function mixHexColors(baseHex: string, accentHex: string, amount: number): string {
+  const base = new THREE.Color(baseHex)
+  const accent = new THREE.Color(accentHex)
+  base.lerp(accent, amount)
+  return `#${base.getHexString()}`
 }
 
 function createNameLabelTexture(name: string): THREE.CanvasTexture {

@@ -1,12 +1,15 @@
 import type {
   GalleryImage,
+  StudioCanvasArtworks,
   GalleryTileImageAssignments,
   GalleryTilePlacements,
+  TruthBoardState,
 } from '../types'
 
 export interface SharedGalleryState {
   uploadedImages: GalleryImage[]
   tileImageAssignments: GalleryTileImageAssignments
+  studioCanvasArtworks: StudioCanvasArtworks
 }
 
 export interface PlayerPoseState {
@@ -20,6 +23,9 @@ export interface PlayerPoseState {
 export interface RemotePlayerState {
   id: string
   name: string
+  kind: 'human' | 'agent'
+  title?: string
+  accentColor?: string
   pose: PlayerPoseState
 }
 
@@ -28,6 +34,8 @@ export interface RoomSnapshot {
   tilePlacements: GalleryTilePlacements
   tileImageAssignments: GalleryTileImageAssignments
   activeStationId: string | null
+  studioCanvasArtworks: StudioCanvasArtworks
+  truthBoard: TruthBoardState
   players: RemotePlayerState[]
 }
 
@@ -39,6 +47,8 @@ export interface JoinPayload {
   tilePlacements: GalleryTilePlacements
   tileImageAssignments: GalleryTileImageAssignments
   activeStationId: string | null
+  studioCanvasArtworks: StudioCanvasArtworks
+  objective: string
 }
 
 export type ClientToServerMessage =
@@ -62,6 +72,13 @@ export type ClientToServerMessage =
       type: 'station_sync'
       payload: {
         activeStationId: string | null
+      }
+    }
+  | {
+      type: 'run_control'
+      payload: {
+        action: 'pause' | 'resume' | 'restart'
+        objective?: string
       }
     }
 
@@ -106,6 +123,13 @@ export type ServerToClientMessage =
       type: 'station_sync'
       payload: {
         activeStationId: string | null
+        changedBy: string
+      }
+    }
+  | {
+      type: 'board_sync'
+      payload: {
+        truthBoard: TruthBoardState
         changedBy: string
       }
     }

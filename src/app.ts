@@ -25,12 +25,20 @@ import {
   type MuseumHotspot,
   type MuseumRoom,
 } from './room/buildMuseumRoom'
+import {
+  clampBrushSize,
+  createStudioArtworkDataUrl,
+  STUDIO_BRUSH_COLORS,
+  STUDIO_CANVAS_SIZE,
+} from './studio/artwork'
 import type {
   GalleryImage,
   GalleryState,
+  StudioCanvasArtworks,
   GalleryTileImageAssignments,
   GalleryTilePlacement,
   GalleryTilePlacements,
+  TruthBoardState,
 } from './types'
 
 const CAMERA_EYE_HEIGHT = 1.66
@@ -43,8 +51,6 @@ const TOUCH_LOOK_PITCH = 0.0038
 const MIN_CAMERA_PITCH = -0.48
 const MAX_CAMERA_PITCH = 0.34
 const DROP_MARGIN = 0.18
-
-const mixtilesLogoUrl = new URL('./assets/brand/mixtiles-logo.svg', import.meta.url).href
 
 interface TouchLookState {
   kind: 'look'
@@ -74,6 +80,21 @@ interface RemotePlayerRuntime {
   targetPose: PlayerPoseState
 }
 
+interface StudioPaintState {
+  pointerId: number
+  lastX: number
+  lastY: number
+}
+
+type StudioBrushTool = 'brush' | 'marker' | 'spray' | 'eraser'
+
+const STUDIO_BRUSH_TOOLS: { id: StudioBrushTool; label: string }[] = [
+  { id: 'brush', label: 'Brush' },
+  { id: 'marker', label: 'Marker' },
+  { id: 'spray', label: 'Spray' },
+  { id: 'eraser', label: 'Eraser' },
+]
+
 export function bootstrapMuseumApp(root: HTMLDivElement): void {
   new MuseumApp(root)
 }
@@ -90,13 +111,23 @@ class MuseumApp {
   private readonly statusVisitor: HTMLParagraphElement
   private readonly statusSync: HTMLParagraphElement
   private readonly statusStation: HTMLParagraphElement
+  private readonly statusTruth: HTMLParagraphElement
+  private readonly objectiveInput: HTMLInputElement
   private readonly uploadInput: HTMLInputElement
   private readonly frameUploadInput: HTMLInputElement
+  private readonly studioDialog: HTMLDialogElement
+  private readonly studioCanvas: HTMLCanvasElement
+  private readonly studioBrushInput: HTMLInputElement
+  private readonly studioBrushValue: HTMLSpanElement
+  private readonly studioColorButtons: HTMLButtonElement[]
+  private readonly studioToolButtons: HTMLButtonElement[]
+  private readonly studioSourceLabel: HTMLParagraphElement
   private readonly helpDialog: HTMLDialogElement
   private readonly dragGhost: HTMLDivElement
   private readonly dragGhostLabel: HTMLSpanElement
   private readonly reticle: HTMLDivElement
   private readonly toolbarEnterButton: HTMLButtonElement
+  private readonly runToggleButton: HTMLButtonElement
   private readonly heroEnterButton: HTMLButtonElement
   private readonly openHelpButtons: HTMLButtonElement[]
   private readonly renderer: THREE.WebGLRenderer
@@ -124,6 +155,10 @@ class MuseumApp {
     string,
     MuseumRoom['interactiveMusicControls'][number]
   >()
+  private readonly interactiveStudioCanvasByHitArea = new Map<
+    string,
+    MuseumRoom['interactiveStudioCanvases'][number]
+  >()
   private readonly remotePlayers = new Map<string, RemotePlayerRuntime>()
   private readonly roomId = resolveRoomId()
   private readonly multiplayerUrl = resolveMultiplayerUrl()
@@ -132,10 +167,13 @@ class MuseumApp {
   private activeImages: GalleryImage[] = []
   private uploadedImages: GalleryImage[] = []
   private tileImageAssignments: GalleryTileImageAssignments = {}
+  private studioCanvasArtworks: StudioCanvasArtworks = {}
+  private truthBoard: TruthBoardState = createDefaultTruthBoard()
   private room: MuseumRoom | null = null
   private multiplayerClient: MuseumMultiplayerClient | null = null
   private multiplayerSelfId: string | null = null
   private playerName = ''
+  private agentObjective = createDefaultTruthBoard().objective
   private tilePlacements = createDefaultTilePlacements(WALL_TEMPLATES)
   private entered = false
   private connectionState: ConnectionState = 'offline'
@@ -145,17 +183,24 @@ class MuseumApp {
   private hoveredItemId: string | null = null
   private hoveredWallId: string | null = null
   private hoveredStationId: string | null = null
+  private hoveredStudioCanvasId: string | null = null
   private activeStationId: string | null = null
   private pendingFrameUploadItemId: string | null = null
   private cameraYaw = 0
   private cameraPitch = -0.05
   private lastPresenceSyncAt = 0
+  private selectedStudioCanvasId: string | null = null
+  private selectedStudioCanvasLabel: string | null = null
+  private activeBrushColor: string = STUDIO_BRUSH_COLORS[0]
+  private activeBrushTool: StudioBrushTool = 'brush'
+  private brushSize = 18
+  private studioPaintState: StudioPaintState | null = null
+  private studioOpen = false
 
   constructor(root: HTMLDivElement) {
     this.root = root
     this.restoreState()
     this.root.innerHTML = createShellMarkup({
-      logoUrl: mixtilesLogoUrl,
       playerName: this.playerName,
       roomId: this.roomId,
       isTouchDevice: this.isTouchDevice,
@@ -171,13 +216,28 @@ class MuseumApp {
     this.statusVisitor = getRequiredElement(root, '[data-status-visitor]')
     this.statusSync = getRequiredElement(root, '[data-status-sync]')
     this.statusStation = getRequiredElement(root, '[data-status-station]')
+    this.statusTruth = getRequiredElement(root, '[data-status-truth]')
+    this.objectiveInput = getRequiredElement(root, '[data-objective-input]')
     this.uploadInput = getRequiredElement(root, '[data-upload]')
     this.frameUploadInput = getRequiredElement(root, '[data-upload-frame]')
+    // Legacy "Upload Photos" support stays wired for compatibility with older room data/tests.
+    this.studioDialog = getRequiredElement(root, '[data-studio]')
+    this.studioCanvas = getRequiredElement(root, '[data-studio-canvas]')
+    this.studioBrushInput = getRequiredElement(root, '[data-studio-brush]')
+    this.studioBrushValue = getRequiredElement(root, '[data-studio-brush-value]')
+    this.studioColorButtons = Array.from(
+      root.querySelectorAll<HTMLButtonElement>('[data-studio-color]'),
+    )
+    this.studioToolButtons = Array.from(
+      root.querySelectorAll<HTMLButtonElement>('[data-studio-tool]'),
+    )
+    this.studioSourceLabel = getRequiredElement(root, '[data-studio-source]')
     this.helpDialog = getRequiredElement(root, '[data-help]')
     this.dragGhost = getRequiredElement(root, '[data-drag-ghost]')
     this.dragGhostLabel = getRequiredElement(root, '[data-drag-ghost-label]')
     this.reticle = getRequiredElement(root, '[data-reticle]')
     this.toolbarEnterButton = getRequiredElement(root, '[data-enter-toolbar]')
+    this.runToggleButton = getRequiredElement(root, '[data-upload-open]')
     this.heroEnterButton = getRequiredElement(root, '[data-enter-hero]')
     this.openHelpButtons = Array.from(root.querySelectorAll<HTMLButtonElement>('[data-help-open]'))
 
@@ -220,16 +280,19 @@ class MuseumApp {
     }
 
     this.rebuildRoom()
+    this.setupStudioEditor()
     this.updateVisitorLabel()
     this.updateSyncLabel()
     this.updateStationLabel()
+    this.updateTruthLabel()
+    this.updateRunButton()
     this.bindEvents()
     this.resize()
     this.renderer.setAnimationLoop(this.animate)
     this.setLoading(false)
     this.setStatus(
-      'Room prepared',
-      'Choose your visitor name, enter in first person, move frames freely, and switch the live station from the listening corner whenever you want.',
+      'Canvas studio prepared',
+      'Choose your visitor name, enter the room, and click any blank canvas to open a bigger shared painting sheet.',
     )
   }
 
@@ -239,6 +302,9 @@ class MuseumApp {
     this.playerName = sanitizeName(restored?.playerName ?? '') ?? ''
     this.activeStationId = getMusicStation(restored?.activeStationId)?.id ?? null
     this.tileImageAssignments = restored?.tileImageAssignments ?? {}
+    this.studioCanvasArtworks = restored?.studioCanvasArtworks ?? {}
+    this.agentObjective = restored?.agentObjective ?? this.agentObjective
+    this.truthBoard = createDefaultTruthBoard(this.agentObjective)
     this.activeImages = mergeGalleryImages(this.placeholders, this.uploadedImages)
     this.tilePlacements = normalizeTilePlacements(
       WALL_TEMPLATES,
@@ -249,6 +315,18 @@ class MuseumApp {
           restored?.slotAssignments,
         ),
     )
+  }
+
+  private setupStudioEditor(): void {
+    this.studioCanvas.width = STUDIO_CANVAS_SIZE.width
+    this.studioCanvas.height = STUDIO_CANVAS_SIZE.height
+    this.objectiveInput.value = this.agentObjective
+    this.studioBrushInput.value = String(this.brushSize)
+    this.updateStudioBrushLabel()
+    this.updateStudioColorButtons()
+    this.updateStudioToolButtons()
+    this.studioSourceLabel.textContent = 'Hero Canvas'
+    void this.renderStudioCanvasFromArtwork(createStudioArtworkDataUrl('blank'))
   }
 
   private bindEvents(): void {
@@ -264,6 +342,29 @@ class MuseumApp {
     )
     this.uploadInput.addEventListener('change', this.handleUploadInput)
     this.frameUploadInput.addEventListener('change', this.handleFrameUploadInput)
+    this.studioBrushInput.addEventListener('input', this.handleStudioBrushInput)
+    this.studioColorButtons.forEach((button) =>
+      button.addEventListener('click', this.handleStudioColorClick),
+    )
+    this.studioToolButtons.forEach((button) =>
+      button.addEventListener('click', this.handleStudioToolClick),
+    )
+    getRequiredElement<HTMLButtonElement>(this.root, '[data-studio-save]').addEventListener(
+      'click',
+      this.handleStudioSave,
+    )
+    getRequiredElement<HTMLButtonElement>(this.root, '[data-studio-clear]').addEventListener(
+      'click',
+      this.handleStudioClear,
+    )
+    Array.from(this.root.querySelectorAll<HTMLButtonElement>('[data-studio-close]')).forEach(
+      (button) => button.addEventListener('click', this.handleStudioClose),
+    )
+    this.studioCanvas.addEventListener('pointerdown', this.handleStudioPointerDown)
+    this.studioCanvas.addEventListener('pointermove', this.handleStudioPointerMove)
+    this.studioCanvas.addEventListener('pointerup', this.handleStudioPointerUp)
+    this.studioCanvas.addEventListener('pointercancel', this.handleStudioPointerUp)
+    this.studioCanvas.addEventListener('pointerleave', this.handleStudioPointerUp)
     this.openHelpButtons.forEach((button) => button.addEventListener('click', this.handleOpenHelp))
     getRequiredElement<HTMLButtonElement>(this.root, '[data-help-close]').addEventListener(
       'click',
@@ -301,10 +402,10 @@ class MuseumApp {
     this.localAvatar.update(delta, speed)
     this.localAvatar.group.position.set(this.playerPosition.x, 0, this.playerPosition.z)
     this.localAvatar.group.visible = this.entered
-    this.reticle.hidden = !this.entered || this.isTouchDevice
+    this.reticle.hidden = !this.entered || this.isTouchDevice || this.studioOpen
     this.reticle.classList.toggle(
       'is-active',
-      Boolean(this.hoveredItemId || this.hoveredStationId),
+      Boolean(this.hoveredItemId || this.hoveredStationId || this.hoveredStudioCanvasId),
     )
     this.reticle.classList.toggle('is-carrying', Boolean(this.carriedFrame))
 
@@ -321,7 +422,12 @@ class MuseumApp {
   }
 
   private updateMovement(delta: number): number {
-    if (!this.room || !this.entered || (this.isTouchDevice && this.carriedFrame !== null)) {
+    if (
+      !this.room ||
+      !this.entered ||
+      this.studioOpen ||
+      (this.isTouchDevice && this.carriedFrame !== null)
+    ) {
       this.playerVelocity.lerp(new THREE.Vector2(), Math.min(delta * 10, 1))
       return this.playerVelocity.length()
     }
@@ -368,6 +474,7 @@ class MuseumApp {
       this.interactiveTileByHitArea.clear()
       this.interactiveWallByMesh.clear()
       this.interactiveMusicByHitArea.clear()
+      this.interactiveStudioCanvasByHitArea.clear()
     }
 
     this.room = buildMuseumRoom(
@@ -375,6 +482,8 @@ class MuseumApp {
       this.isTouchDevice,
       this.tilePlacements,
       this.tileImageAssignments,
+      this.studioCanvasArtworks,
+      this.truthBoard,
     )
     this.scene.add(this.room.group)
 
@@ -388,6 +497,10 @@ class MuseumApp {
 
     for (const control of this.room.interactiveMusicControls) {
       this.interactiveMusicByHitArea.set(control.hitArea.uuid, control)
+    }
+
+    for (const studioCanvas of this.room.interactiveStudioCanvases) {
+      this.interactiveStudioCanvasByHitArea.set(studioCanvas.hitArea.uuid, studioCanvas)
     }
 
     if (!this.entered) {
@@ -446,13 +559,15 @@ class MuseumApp {
 
     if (!nextName) {
       this.nameInput.focus()
-      this.setStatus('Add your name first', 'Pick a visitor name before entering the gallery.')
+      this.setStatus('Add your name first', 'Pick a visitor name before entering the studio.')
       return
     }
 
     this.playerName = nextName
     this.localAvatar.setName(nextName)
     this.updateVisitorLabel()
+    this.updateTruthLabel()
+    this.updateRunButton()
     this.persistState()
 
     if (!this.room) {
@@ -462,7 +577,7 @@ class MuseumApp {
     this.entered = true
     this.heroPanel.classList.add('is-hidden')
     this.toolbarEnterButton.textContent = 'Re-center'
-    this.heroEnterButton.textContent = 'Enter Gallery'
+    this.heroEnterButton.textContent = 'Enter Studio'
     this.playerVelocity.set(0, 0)
 
     const start = this.room.defaultPose
@@ -474,8 +589,8 @@ class MuseumApp {
     this.setStatus(
       `Welcome, ${nextName}`,
       this.isTouchDevice
-        ? 'Touch mode is live. Drag frames on the walls whenever you want, and tap the listening corner buttons to switch the live station.'
-        : 'First-person mode is live. Mouse look starts automatically, use W A S D to walk, right-click a frame to replace that exact photo, and aim at the listening corner buttons to change or stop stations.',
+        ? 'Touch mode is live. Drag to look, tap the floor markers to jump viewpoints, and tap any wall canvas to open a bigger painting sheet.'
+        : 'First-person mode is live. Mouse look starts automatically, use W A S D to walk, and click any wall canvas to open a bigger painting sheet.',
     )
 
     this.requestDesktopPointerLock()
@@ -490,8 +605,26 @@ class MuseumApp {
   }
 
   private readonly handleUploadOpen = (): void => {
-    this.pendingFrameUploadItemId = null
-    this.uploadInput.click()
+    if (!this.entered) {
+      this.setStatus(
+        'Enter the room first',
+        'Choose your name and step into the studio before resetting all of the shared canvases.',
+      )
+      return
+    }
+
+    this.selectedStudioCanvasId = null
+    this.selectedStudioCanvasLabel = null
+    this.studioCanvasArtworks = {}
+    this.rebuildRoom()
+    this.persistState()
+    this.syncGalleryImages()
+    void this.renderStudioCanvasFromArtwork(createStudioArtworkDataUrl('blank'))
+    this.updateTruthLabel()
+    this.setStatus(
+      'All canvases cleared',
+      'Every shared canvas is blank again, so anyone in the room can start painting from scratch.',
+    )
   }
 
   private readonly handleUploadInput = async (): Promise<void> => {
@@ -571,18 +704,15 @@ class MuseumApp {
   }
 
   private readonly handleReset = (): void => {
-    this.uploadedImages = []
-    this.activeImages = [...this.placeholders]
-    this.tilePlacements = createDefaultTilePlacements(WALL_TEMPLATES)
-    this.tileImageAssignments = {}
-    this.persistState()
-    this.rebuildRoom()
-    this.syncGalleryImages()
-    this.multiplayerClient?.updateTilePlacements(this.tilePlacements)
-    this.setStatus(
-      'Gallery reset',
-      'All uploads, targeted frame photos, and custom frame positions are reset to the curated default room.',
-    )
+    if (!this.entered) {
+      this.setStatus(
+        'Enter the room first',
+        'Choose your visitor name and step into the studio before opening the hero canvas sheet.',
+      )
+      return
+    }
+
+    this.openStudioEditor('canvas-north-hero', 'Hero Canvas')
   }
 
   private readonly handleOpenHelp = (): void => {
@@ -610,6 +740,7 @@ class MuseumApp {
       this.hoveredItemId = null
       this.hoveredWallId = null
       this.hoveredStationId = null
+      this.hoveredStudioCanvasId = null
 
       if (this.carriedFrame) {
         this.carriedFrame = null
@@ -625,7 +756,7 @@ class MuseumApp {
   }
 
   private readonly handleCanvasContextMenu = (event: MouseEvent): void => {
-    if (!this.entered || this.isTouchDevice) {
+    if (!this.entered || this.isTouchDevice || this.studioOpen || !this.room?.interactiveTiles.length) {
       return
     }
 
@@ -649,7 +780,7 @@ class MuseumApp {
   }
 
   private readonly handleMouseMove = (event: MouseEvent): void => {
-    if (!this.pointerLocked || !this.entered) {
+    if (!this.pointerLocked || !this.entered || this.studioOpen) {
       return
     }
 
@@ -662,7 +793,7 @@ class MuseumApp {
   }
 
   private readonly handleCanvasClick = (): void => {
-    if (!this.entered || this.isTouchDevice) {
+    if (!this.entered || this.isTouchDevice || this.studioOpen) {
       return
     }
 
@@ -686,6 +817,13 @@ class MuseumApp {
       return
     }
 
+    const studioCanvas = this.pickCenteredStudioCanvas()
+
+    if (studioCanvas) {
+      this.openStudioEditor(studioCanvas.id, studioCanvas.label)
+      return
+    }
+
     const interactiveTile = this.pickCenteredInteractiveTile()
 
     if (!interactiveTile) {
@@ -696,6 +834,12 @@ class MuseumApp {
   }
 
   private readonly handleKeyDown = (event: KeyboardEvent): void => {
+    if (this.studioOpen && event.code === 'Escape') {
+      event.preventDefault()
+      this.closeStudioEditor()
+      return
+    }
+
     if (isTypingTarget(document.activeElement)) {
       return
     }
@@ -753,7 +897,7 @@ class MuseumApp {
   }
 
   private readonly handlePointerDown = (event: PointerEvent): void => {
-    if (!this.room || !this.entered) {
+    if (!this.room || !this.entered || this.studioOpen) {
       return
     }
 
@@ -791,6 +935,13 @@ class MuseumApp {
       return
     }
 
+    const studioCanvas = this.pickInteractiveStudioCanvas(event)
+
+    if (studioCanvas) {
+      this.openStudioEditor(studioCanvas.id, studioCanvas.label)
+      return
+    }
+
     const interactiveTile = this.pickInteractiveTile(event)
 
     if (interactiveTile) {
@@ -817,7 +968,7 @@ class MuseumApp {
   }
 
   private readonly handlePointerMove = (event: PointerEvent): void => {
-    if (!this.room || !this.entered) {
+    if (!this.room || !this.entered || this.studioOpen) {
       return
     }
 
@@ -919,6 +1070,7 @@ class MuseumApp {
     this.hoveredItemId = null
     this.hoveredWallId = null
     this.hoveredStationId = null
+    this.hoveredStudioCanvasId = null
     this.refreshInteractionHighlights()
   }
 
@@ -927,12 +1079,13 @@ class MuseumApp {
       this.hoveredItemId = null
       this.hoveredWallId = null
       this.hoveredStationId = null
+      this.hoveredStudioCanvasId = null
       this.refreshInteractionHighlights()
     }
   }
 
   private updateDesktopAim(): void {
-    if (!this.room || !this.entered || this.isTouchDevice) {
+    if (!this.room || !this.entered || this.isTouchDevice || this.studioOpen) {
       return
     }
 
@@ -955,6 +1108,18 @@ class MuseumApp {
         this.hoveredItemId = null
         this.hoveredWallId = null
         this.hoveredStationId = hoveredMusicControl.stationId
+        this.hoveredStudioCanvasId = null
+        this.refreshInteractionHighlights()
+        return
+      }
+
+      const hoveredStudioCanvas = this.pickCenteredStudioCanvas()
+
+      if (hoveredStudioCanvas) {
+        this.hoveredItemId = null
+        this.hoveredWallId = null
+        this.hoveredStationId = null
+        this.hoveredStudioCanvasId = hoveredStudioCanvas.id
         this.refreshInteractionHighlights()
         return
       }
@@ -963,14 +1128,16 @@ class MuseumApp {
       this.hoveredItemId = hoveredTile?.itemId ?? null
       this.hoveredWallId = null
       this.hoveredStationId = null
+      this.hoveredStudioCanvasId = null
       this.refreshInteractionHighlights()
       return
     }
 
-    if (this.hoveredItemId || this.hoveredWallId || this.hoveredStationId) {
+    if (this.hoveredItemId || this.hoveredWallId || this.hoveredStationId || this.hoveredStudioCanvasId) {
       this.hoveredItemId = null
       this.hoveredWallId = null
       this.hoveredStationId = null
+      this.hoveredStudioCanvasId = null
       this.refreshInteractionHighlights()
     }
   }
@@ -989,6 +1156,7 @@ class MuseumApp {
     this.hoveredItemId = itemId
     this.hoveredWallId = this.carriedFrame.dropPlacement?.wallId ?? null
     this.hoveredStationId = null
+    this.hoveredStudioCanvasId = null
 
     if (typeof clientX === 'number' && typeof clientY === 'number') {
       this.showDragGhost(this.getTileDragLabel(interactiveTile), clientX, clientY)
@@ -1021,6 +1189,7 @@ class MuseumApp {
     this.hoveredItemId = null
     this.hoveredWallId = null
     this.hoveredStationId = null
+    this.hoveredStudioCanvasId = null
     this.applyTilePlacement(itemId, dropPlacement)
     this.setStatus('Frame placed', 'That frame is now mounted exactly where you aimed it.')
   }
@@ -1081,9 +1250,13 @@ class MuseumApp {
             this.applyRemoteTilePlacements(tilePlacements)
           }
         },
-        onGallerySync: (uploadedImages, tileImageAssignments, changedBy) => {
+        onGallerySync: (uploadedImages, tileImageAssignments, studioCanvasArtworks, changedBy) => {
           if (changedBy !== this.multiplayerSelfId) {
-            this.applyRemoteGalleryImages(uploadedImages, tileImageAssignments)
+            this.applyRemoteGalleryImages(
+              uploadedImages,
+              tileImageAssignments,
+              studioCanvasArtworks,
+            )
           }
         },
         onStationSync: (activeStationId, changedBy) => {
@@ -1092,6 +1265,22 @@ class MuseumApp {
               sync: false,
               announce: false,
             })
+          }
+        },
+        onBoardSync: (truthBoard, changedBy) => {
+          this.truthBoard = truthBoard
+          this.agentObjective = truthBoard.objective
+          this.objectiveInput.value = truthBoard.objective
+          this.persistState()
+          this.updateTruthLabel()
+          this.updateRunButton()
+          this.rebuildRoom()
+
+          if (changedBy !== this.multiplayerSelfId && changedBy === 'system') {
+            this.setStatus(
+              'Studio sync updated',
+              'The shared room state changed in the background and your studio just refreshed.',
+            )
           }
         },
         onError: (message) => {
@@ -1108,6 +1297,8 @@ class MuseumApp {
       tilePlacements: this.tilePlacements,
       tileImageAssignments: this.tileImageAssignments,
       activeStationId: this.activeStationId,
+      studioCanvasArtworks: this.studioCanvasArtworks,
+      objective: this.agentObjective,
     })
   }
 
@@ -1116,8 +1307,17 @@ class MuseumApp {
     this.activeImages = mergeGalleryImages(this.placeholders, this.uploadedImages)
     this.tilePlacements = normalizeTilePlacements(WALL_TEMPLATES, snapshot.tilePlacements)
     this.tileImageAssignments = snapshot.tileImageAssignments
+    this.studioCanvasArtworks = snapshot.studioCanvasArtworks
+    this.truthBoard = snapshot.truthBoard
+    this.agentObjective = snapshot.truthBoard.objective
+    this.objectiveInput.value = this.agentObjective
+    this.selectedStudioCanvasId = null
+    this.selectedStudioCanvasLabel = null
+    void this.renderStudioCanvasFromArtwork(createStudioArtworkDataUrl('blank'))
     this.persistState()
     this.rebuildRoom()
+    this.updateTruthLabel()
+    this.updateRunButton()
     this.syncRemotePlayers(snapshot.players)
     void this.activateStation(snapshot.activeStationId, {
       sync: false,
@@ -1130,6 +1330,7 @@ class MuseumApp {
     this.hoveredItemId = null
     this.hoveredWallId = null
     this.hoveredStationId = null
+    this.hoveredStudioCanvasId = null
     this.hideDragGhost()
     this.tilePlacements = normalizeTilePlacements(WALL_TEMPLATES, tilePlacements)
     this.persistState()
@@ -1139,19 +1340,26 @@ class MuseumApp {
   private applyRemoteGalleryImages(
     uploadedImages: GalleryImage[],
     tileImageAssignments: GalleryTileImageAssignments,
+    studioCanvasArtworks: StudioCanvasArtworks,
   ): void {
     this.uploadedImages = uploadedImages
     this.activeImages = mergeGalleryImages(this.placeholders, this.uploadedImages)
     this.tileImageAssignments = tileImageAssignments
+    this.studioCanvasArtworks = studioCanvasArtworks
+    if (this.studioOpen && this.selectedStudioCanvasId) {
+      const selectedArtwork = this.studioCanvasArtworks[this.selectedStudioCanvasId]
+      void this.renderStudioCanvasFromArtwork(selectedArtwork ?? createStudioArtworkDataUrl('blank'))
+    }
     this.persistState()
     this.rebuildRoom()
+    this.updateTruthLabel()
   }
 
   private syncRemotePlayers(players: RemotePlayerState[]): void {
     const playerIds = new Set<string>()
 
     for (const player of players) {
-      if (player.id === this.multiplayerSelfId) {
+      if (player.id === this.multiplayerSelfId || player.kind === 'agent') {
         continue
       }
 
@@ -1167,19 +1375,22 @@ class MuseumApp {
   }
 
   private upsertRemotePlayer(player: RemotePlayerState): void {
-    if (player.id === this.multiplayerSelfId) {
+    if (player.id === this.multiplayerSelfId || player.kind === 'agent') {
       return
     }
 
     const existing = this.remotePlayers.get(player.id)
+    const displayName = player.name
 
     if (existing) {
-      existing.avatar.setName(player.name)
+      existing.avatar.setName(displayName)
       existing.targetPose = player.pose
       return
     }
 
-    const avatar = createPlayerAvatar(player.name)
+    const avatar = createPlayerAvatar(displayName, {
+      accentColor: player.accentColor,
+    })
     avatar.setFirstPersonMode(false)
     avatar.group.position.set(player.pose.x, 0, player.pose.z)
     avatar.setFacing(player.pose.yaw + Math.PI)
@@ -1450,6 +1661,50 @@ class MuseumApp {
     return null
   }
 
+  private pickInteractiveStudioCanvas(
+    event: PointerEvent,
+  ): MuseumRoom['interactiveStudioCanvases'][number] | null {
+    if (!this.room) {
+      return null
+    }
+
+    this.updatePointerFromEvent(event)
+    return this.pickInteractiveStudioCanvasFromCurrentPointer()
+  }
+
+  private pickCenteredStudioCanvas(): MuseumRoom['interactiveStudioCanvases'][number] | null {
+    if (!this.room) {
+      return null
+    }
+
+    this.pointer.set(0, 0)
+    return this.pickInteractiveStudioCanvasFromCurrentPointer()
+  }
+
+  private pickInteractiveStudioCanvasFromCurrentPointer():
+    | MuseumRoom['interactiveStudioCanvases'][number]
+    | null {
+    if (!this.room) {
+      return null
+    }
+
+    this.raycaster.setFromCamera(this.pointer, this.camera)
+
+    const intersections = this.raycaster.intersectObjects(
+      this.room.interactiveStudioCanvases.map((canvas) => canvas.hitArea),
+      false,
+    )
+
+    for (const intersection of intersections) {
+      const studioCanvas = this.interactiveStudioCanvasByHitArea.get(intersection.object.uuid)
+      if (studioCanvas) {
+        return studioCanvas
+      }
+    }
+
+    return null
+  }
+
   private pickWallPlacement(
     event: PointerEvent,
     tile: MuseumRoom['interactiveTiles'][number],
@@ -1570,6 +1825,12 @@ class MuseumApp {
       control.buttonMaterial.emissive.set(isActive || isHovered ? control.accentColor : '#170d10')
       control.buttonMaterial.emissiveIntensity = isActive ? 0.92 : isHovered ? 0.48 : 0.14
     }
+
+    for (const studioCanvas of this.room.interactiveStudioCanvases) {
+      const isHovered = studioCanvas.id === this.hoveredStudioCanvasId
+      studioCanvas.halo.visible = isHovered
+      studioCanvas.haloMaterial.opacity = isHovered ? 0.22 : 0.12
+    }
   }
 
   private updateTouchHotspots(now: number): void {
@@ -1606,6 +1867,19 @@ class MuseumApp {
         this.statusSync.textContent = `Room: ${this.roomId} · Solo mode`
         break
     }
+  }
+
+  private updateTruthLabel(): void {
+    const paintedCount = Object.keys(this.studioCanvasArtworks).length
+    const editingLabel = this.selectedStudioCanvasLabel
+
+    this.statusTruth.textContent = editingLabel
+      ? `Canvas: editing ${editingLabel}`
+      : `Canvas: ${paintedCount} painted | click any wall canvas to open a blank sheet`
+  }
+
+  private updateRunButton(): void {
+    this.runToggleButton.textContent = 'Blank All Canvases'
   }
 
   private updateStationLabel(overrideText?: string): void {
@@ -1646,6 +1920,306 @@ class MuseumApp {
     return image?.label ?? 'Move frame'
   }
 
+  private openStudioEditor(canvasId: string, sourceLabel: string): void {
+    if (this.studioOpen) {
+      return
+    }
+
+    this.studioOpen = true
+    this.selectedStudioCanvasId = canvasId
+    this.selectedStudioCanvasLabel = sourceLabel
+    this.hoveredStudioCanvasId = null
+    this.refreshInteractionHighlights()
+    this.updateTruthLabel()
+    this.updateStudioToolButtons()
+    this.studioSourceLabel.textContent = sourceLabel
+
+    if (this.pointerLocked) {
+      document.exitPointerLock()
+    }
+
+    void this.renderStudioCanvasFromArtwork(
+      this.studioCanvasArtworks[canvasId] ?? createStudioArtworkDataUrl('blank'),
+    )
+
+    if (typeof this.studioDialog.showModal === 'function') {
+      this.studioDialog.showModal()
+    } else {
+      this.studioDialog.setAttribute('open', 'true')
+    }
+
+    this.setStatus(
+      'Painting sheet open',
+      `${sourceLabel} is ready. Paint on the sheet, then save to project the artwork back into the room.`,
+    )
+  }
+
+  private closeStudioEditor(): void {
+    this.studioOpen = false
+    this.studioPaintState = null
+    this.selectedStudioCanvasId = null
+    this.selectedStudioCanvasLabel = null
+    this.updateTruthLabel()
+
+    if (typeof this.studioDialog.close === 'function' && this.studioDialog.open) {
+      this.studioDialog.close()
+    } else {
+      this.studioDialog.removeAttribute('open')
+    }
+
+    if (this.entered) {
+      this.requestDesktopPointerLock()
+    }
+  }
+
+  private readonly handleStudioSave = (): void => {
+    if (!this.selectedStudioCanvasId) {
+      return
+    }
+
+    this.studioCanvasArtworks = {
+      ...this.studioCanvasArtworks,
+      [this.selectedStudioCanvasId]: this.studioCanvas.toDataURL('image/png'),
+    }
+    this.persistState()
+    this.rebuildRoom()
+    this.syncGalleryImages()
+    this.closeStudioEditor()
+    this.setStatus(
+      'Painting projected',
+      'That canvas now shows your new artwork for everyone in the room.',
+    )
+  }
+
+  private readonly handleStudioClose = (): void => {
+    this.closeStudioEditor()
+    this.setStatus(
+      'Painting sheet closed',
+      'The sheet is tucked away again. Click any wall canvas whenever you want to paint more.',
+    )
+  }
+
+  private readonly handleStudioClear = (): void => {
+    void this.renderStudioCanvasFromArtwork(createStudioArtworkDataUrl('blank'))
+    this.setStatus(
+      'Fresh canvas',
+      'The drawing sheet is back to a blank surface. Save when you want to project it into the room.',
+    )
+  }
+
+  private readonly handleStudioBrushInput = (): void => {
+    this.brushSize = clampBrushSize(Number(this.studioBrushInput.value))
+    this.studioBrushInput.value = String(this.brushSize)
+    this.updateStudioBrushLabel()
+  }
+
+  private readonly handleStudioColorClick = (event: MouseEvent): void => {
+    const button = event.currentTarget
+
+    if (!(button instanceof HTMLButtonElement)) {
+      return
+    }
+
+    const color = button.dataset.studioColor
+
+    if (!color) {
+      return
+    }
+
+    this.activeBrushColor = color
+    this.updateStudioColorButtons()
+  }
+
+  private readonly handleStudioToolClick = (event: MouseEvent): void => {
+    const button = event.currentTarget
+
+    if (!(button instanceof HTMLButtonElement)) {
+      return
+    }
+
+    const nextTool = button.dataset.studioTool as StudioBrushTool | undefined
+
+    if (!nextTool) {
+      return
+    }
+
+    this.activeBrushTool = nextTool
+    this.updateStudioToolButtons()
+    this.setStatus(
+      'Brush updated',
+      `${button.textContent?.trim() ?? 'That'} tool is active on the current sheet.`,
+    )
+  }
+
+  private readonly handleStudioPointerDown = (event: PointerEvent): void => {
+    if (!this.studioOpen || event.button !== 0) {
+      return
+    }
+
+    event.preventDefault()
+    const point = this.getStudioCanvasPoint(event)
+    this.studioPaintState = {
+      pointerId: event.pointerId,
+      lastX: point.x,
+      lastY: point.y,
+    }
+    this.studioCanvas.setPointerCapture(event.pointerId)
+    this.drawStudioStroke(point.x, point.y)
+  }
+
+  private readonly handleStudioPointerMove = (event: PointerEvent): void => {
+    if (!this.studioPaintState || this.studioPaintState.pointerId !== event.pointerId) {
+      return
+    }
+
+    event.preventDefault()
+    const nextPoint = this.getStudioCanvasPoint(event)
+    this.drawStudioStroke(
+      this.studioPaintState.lastX,
+      this.studioPaintState.lastY,
+      nextPoint.x,
+      nextPoint.y,
+    )
+    this.studioPaintState.lastX = nextPoint.x
+    this.studioPaintState.lastY = nextPoint.y
+  }
+
+  private readonly handleStudioPointerUp = (event: PointerEvent): void => {
+    if (!this.studioPaintState || this.studioPaintState.pointerId !== event.pointerId) {
+      return
+    }
+
+    if (this.studioCanvas.hasPointerCapture(event.pointerId)) {
+      this.studioCanvas.releasePointerCapture(event.pointerId)
+    }
+
+    this.studioPaintState = null
+  }
+
+  private getStudioCanvasPoint(event: PointerEvent): { x: number; y: number } {
+    const rect = this.studioCanvas.getBoundingClientRect()
+    return {
+      x: ((event.clientX - rect.left) / rect.width) * this.studioCanvas.width,
+      y: ((event.clientY - rect.top) / rect.height) * this.studioCanvas.height,
+    }
+  }
+
+  private drawStudioStroke(fromX: number, fromY: number, toX?: number, toY?: number): void {
+    const context = this.getStudioContext()
+    context.save()
+    context.lineCap = 'round'
+    context.lineJoin = 'round'
+    const hasLineTarget = typeof toX === 'number' && typeof toY === 'number'
+
+    if (this.activeBrushTool === 'spray') {
+      const distance = hasLineTarget ? Math.hypot(toX - fromX, toY - fromY) : 0
+      const steps = Math.max(1, Math.ceil(distance / 12))
+
+      for (let index = 0; index < steps; index += 1) {
+        const progress = steps === 1 ? 0 : index / (steps - 1)
+        const targetX = hasLineTarget ? THREE.MathUtils.lerp(fromX, toX, progress) : fromX
+        const targetY = hasLineTarget ? THREE.MathUtils.lerp(fromY, toY, progress) : fromY
+        this.drawStudioSprayBurst(context, targetX, targetY)
+      }
+
+      context.restore()
+      return
+    }
+
+    if (this.activeBrushTool === 'eraser') {
+      context.globalCompositeOperation = 'destination-out'
+      context.strokeStyle = '#000000'
+      context.fillStyle = '#000000'
+      context.lineWidth = this.brushSize * 1.2
+    } else if (this.activeBrushTool === 'marker') {
+      context.strokeStyle = withAlpha(this.activeBrushColor, 0.42)
+      context.fillStyle = withAlpha(this.activeBrushColor, 0.42)
+      context.lineWidth = this.brushSize * 1.55
+    } else {
+      context.strokeStyle = this.activeBrushColor
+      context.fillStyle = this.activeBrushColor
+      context.lineWidth = this.brushSize
+    }
+
+    if (hasLineTarget) {
+      context.beginPath()
+      context.moveTo(fromX, fromY)
+      context.lineTo(toX, toY)
+      context.stroke()
+    } else {
+      context.beginPath()
+      context.arc(fromX, fromY, context.lineWidth / 2, 0, Math.PI * 2)
+      context.fill()
+    }
+
+    context.restore()
+  }
+
+  private drawStudioSprayBurst(
+    context: CanvasRenderingContext2D,
+    centerX: number,
+    centerY: number,
+  ): void {
+    const radius = this.brushSize * 0.72
+    const dots = Math.max(14, Math.round(this.brushSize * 1.6))
+    context.fillStyle =
+      this.activeBrushTool === 'eraser' ? '#000000' : withAlpha(this.activeBrushColor, 0.28)
+
+    for (let index = 0; index < dots; index += 1) {
+      const angle = Math.random() * Math.PI * 2
+      const distance = Math.random() * radius
+      const x = centerX + Math.cos(angle) * distance
+      const y = centerY + Math.sin(angle) * distance
+      const size = 0.8 + Math.random() * (this.brushSize * 0.08)
+      context.beginPath()
+      context.arc(x, y, size, 0, Math.PI * 2)
+      context.fill()
+    }
+  }
+
+  private async renderStudioCanvasFromArtwork(artwork: string): Promise<void> {
+    const context = this.getStudioContext()
+    context.clearRect(0, 0, this.studioCanvas.width, this.studioCanvas.height)
+
+    try {
+      const image = await loadImageSource(artwork)
+      context.drawImage(image, 0, 0, this.studioCanvas.width, this.studioCanvas.height)
+    } catch {
+      context.fillStyle = '#ffffff'
+      context.fillRect(0, 0, this.studioCanvas.width, this.studioCanvas.height)
+    }
+  }
+
+  private getStudioContext(): CanvasRenderingContext2D {
+    const context = this.studioCanvas.getContext('2d')
+
+    if (!context) {
+      throw new Error('Studio painting canvas requires a 2D context.')
+    }
+
+    return context
+  }
+
+  private updateStudioBrushLabel(): void {
+    this.studioBrushValue.textContent = `${this.brushSize}px`
+  }
+
+  private updateStudioColorButtons(): void {
+    this.studioColorButtons.forEach((button) => {
+      const isActive = button.dataset.studioColor === this.activeBrushColor
+      button.classList.toggle('is-active', isActive)
+      button.setAttribute('aria-pressed', isActive ? 'true' : 'false')
+    })
+  }
+
+  private updateStudioToolButtons(): void {
+    this.studioToolButtons.forEach((button) => {
+      const isActive = button.dataset.studioTool === this.activeBrushTool
+      button.classList.toggle('is-active', isActive)
+      button.setAttribute('aria-pressed', isActive ? 'true' : 'false')
+    })
+  }
+
   private openFrameUploadForItem(itemId: string): void {
     this.pendingFrameUploadItemId = itemId
 
@@ -1661,7 +2235,11 @@ class MuseumApp {
   }
 
   private syncGalleryImages(): void {
-    this.multiplayerClient?.updateGalleryImages(this.uploadedImages, this.tileImageAssignments)
+    this.multiplayerClient?.updateGalleryImages(
+      this.uploadedImages,
+      this.tileImageAssignments,
+      this.studioCanvasArtworks,
+    )
   }
 
   private persistState(): void {
@@ -1671,6 +2249,9 @@ class MuseumApp {
       tilePlacements: this.tilePlacements,
       tileImageAssignments: this.tileImageAssignments,
       activeStationId: this.activeStationId ?? undefined,
+      studioCanvasArtworks:
+        Object.keys(this.studioCanvasArtworks).length > 0 ? this.studioCanvasArtworks : undefined,
+      agentObjective: this.agentObjective,
     }
 
     if (
@@ -1678,7 +2259,9 @@ class MuseumApp {
       !state.playerName &&
       isDefaultTilePlacements(this.tilePlacements) &&
       Object.keys(this.tileImageAssignments).length === 0 &&
-      !state.activeStationId
+      !state.activeStationId &&
+      !state.studioCanvasArtworks &&
+      state.agentObjective === createDefaultTruthBoard().objective
     ) {
       clearGalleryState(this.roomId)
       return
@@ -1707,28 +2290,45 @@ class MuseumApp {
 }
 
 function createShellMarkup({
-  logoUrl,
   playerName,
   roomId,
   isTouchDevice,
 }: {
-  logoUrl: string
   playerName: string
   roomId: string
   isTouchDevice: boolean
 }): string {
   const safeName = escapeHtml(playerName)
+  const brushSwatches = STUDIO_BRUSH_COLORS.map(
+    (color) => `
+      <button
+        type="button"
+        class="studio-swatch${color === STUDIO_BRUSH_COLORS[0] ? ' is-active' : ''}"
+        style="--swatch:${color}"
+        data-studio-color="${color}"
+        aria-pressed="${color === STUDIO_BRUSH_COLORS[0] ? 'true' : 'false'}"
+        aria-label="Brush color ${color}"
+      ></button>
+    `,
+  ).join('')
+  const toolButtons = STUDIO_BRUSH_TOOLS.map(
+    (tool) => `
+      <button type="button" class="studio-chip${tool.id === 'brush' ? ' is-active' : ''}" data-studio-tool="${tool.id}" aria-pressed="${tool.id === 'brush' ? 'true' : 'false'}">
+        ${escapeHtml(tool.label)}
+      </button>
+    `,
+  ).join('')
 
   return `
     <div class="museum-app">
       <div class="loading-screen is-visible" data-loading>
         <div class="loading-card">
           <div class="loading-lockup">
-            <img class="loading-logo" src="${logoUrl}" alt="Mixtiles logo" />
-            <span class="loading-mark">Mixtiles.com</span>
+            <div class="loading-logo" aria-label="ClawArt logo">ClawArt</div>
+            <span class="loading-mark">ClawArt</span>
           </div>
-          <h2 class="loading-title">Preparing your gallery room.</h2>
-          <p class="loading-copy">Warming the lights, mounting the walls, and getting the first-person room ready.</p>
+          <h2 class="loading-title">Preparing your canvas studio.</h2>
+          <p class="loading-copy">Warming the lights, laying out the blank canvases, and getting the shared painting room ready.</p>
           <div class="loading-bar" aria-hidden="true"></div>
         </div>
       </div>
@@ -1744,27 +2344,27 @@ function createShellMarkup({
       <div class="control-bar">
         <div class="brand-banner">
           <div class="brand-logo-shell">
-            <img class="brand-logo" src="${logoUrl}" alt="Mixtiles logo" />
+            <div class="brand-logo" aria-label="ClawArt logo">ClawArt</div>
           </div>
           <div class="brand-copy">
-            <p class="brand-kicker">Mixtiles.com</p>
-            <h1 class="brand-title">Welcome to Mixtiles Gallery!</h1>
-            <p class="brand-sub">Enter the room in first person, rearrange frames freely, and walk to the listening corner to switch the live room soundtrack.</p>
+            <p class="brand-kicker">ClawArt</p>
+            <h1 class="brand-title">Welcome to ClawArt Canvas Studio!</h1>
+            <p class="brand-sub">Walk around the room, click any blank canvas to open a big painting sheet, and create art together with everyone in the same shared room.</p>
           </div>
         </div>
 
         <div class="button-row">
-          <button type="button" class="toolbar-button primary" data-enter-toolbar>Enter Gallery</button>
-          <button type="button" class="toolbar-button" data-upload-open>Upload Photos</button>
-          <button type="button" class="toolbar-button" data-reset>Reset Layout</button>
+          <button type="button" class="toolbar-button primary" data-enter-toolbar>Enter Studio</button>
+          <button type="button" class="toolbar-button" data-upload-open>Blank All Canvases</button>
+          <button type="button" class="toolbar-button" data-reset>Open Hero Canvas</button>
           <button type="button" class="toolbar-button" data-help-open>Help</button>
         </div>
       </div>
 
       <section class="hero-panel" data-hero>
-        <p class="eyebrow">Interactive Room</p>
-        <h2 class="hero-title">Choose your name, then walk the museum in first person.</h2>
-        <p class="hero-copy">You stay in the room like a Doom-style first-person visitor. Rearrange frames on the walls and use the retro listening corner to switch between live radio genres.</p>
+        <p class="eyebrow">Shared Painting Room</p>
+        <h2 class="hero-title">Choose your name, enter in first person, and paint on any wall canvas.</h2>
+        <p class="hero-copy">Each canvas opens into a larger plain white sheet where you can paint with colors and brush tools, save it back to the wall, clear it, and keep making art together with other players in the same room.</p>
 
         <form class="hero-form" data-name-form>
           <label class="field-stack">
@@ -1781,27 +2381,30 @@ function createShellMarkup({
             />
           </label>
 
+          <input data-objective-input type="hidden" value="Create art together on every canvas in the room." />
+
           <p class="hero-note">
             ${
               isTouchDevice
-                ? 'Touch: drag to look, tap floor markers to jump viewpoints, drag any frame directly to a new wall position, and tap the listening corner buttons to switch or stop the music.'
-                : 'Desktop: entering the gallery starts mouse look automatically, use W A S D to walk, right-click a frame to replace just that photo, and aim at the listening corner buttons whenever you want to change or stop stations.'
+                ? 'Touch: drag to look, tap floor markers to jump around the room, and tap any wall canvas to open its big painting sheet.'
+                : 'Desktop: entering the studio starts mouse look automatically, use W A S D to walk, and click any wall canvas to open its big painting sheet.'
             }
           </p>
 
           <div class="hero-actions">
-            <button type="submit" class="hero-button primary" data-enter-hero>Enter Gallery</button>
+            <button type="submit" class="hero-button primary" data-enter-hero>Enter Studio</button>
             <button type="button" class="hero-button secondary" data-help-open>How it works</button>
           </div>
         </form>
       </section>
 
       <aside class="status-card">
-        <p class="status-kicker">Live Gallery Builder</p>
-        <p class="status-title" data-status-title>Room prepared</p>
-        <p class="status-copy" data-status-copy>Choose your visitor name, then enter the museum.</p>
+        <p class="status-kicker">Live Canvas Room</p>
+        <p class="status-title" data-status-title>Canvas studio prepared</p>
+        <p class="status-copy" data-status-copy>Choose your visitor name, enter the room, and click any canvas to start painting.</p>
         <p class="status-visitor" data-status-visitor>Visitor: Guest</p>
         <p class="status-sync" data-status-sync>Room: ${escapeHtml(roomId)} · Solo mode</p>
+        <p class="status-truth" data-status-truth>Canvas: 0 painted | click any wall canvas to open a blank sheet</p>
         <p class="status-station" data-status-station>Radio: Walk to the listening corner and pick a live station</p>
       </aside>
 
@@ -1812,19 +2415,64 @@ function createShellMarkup({
         <span class="drag-ghost-label" data-drag-ghost-label>Move frame</span>
       </div>
 
+      <dialog class="studio-dialog" data-studio>
+        <div class="studio-shell">
+          <div class="studio-header">
+            <div>
+              <p class="studio-kicker">Canvas Studio</p>
+              <h2 class="studio-title">Paint on a shared blank sheet.</h2>
+              <p class="studio-copy" data-studio-source>Hero Canvas</p>
+            </div>
+            <button type="button" class="dialog-close studio-close-top" data-studio-close>Close</button>
+          </div>
+
+          <p class="studio-copy">Paint with brushes, marker, spray, or eraser, then save to project the artwork back onto that exact wall canvas for everyone in the room.</p>
+
+          <div class="studio-board">
+            <canvas class="studio-canvas" data-studio-canvas></canvas>
+          </div>
+
+          <div class="studio-toolbar">
+            <div class="studio-section">
+              <span class="studio-section-label">Brush</span>
+              <label class="studio-range">
+                <input type="range" min="4" max="42" step="1" value="18" data-studio-brush />
+                <span class="studio-range-value" data-studio-brush-value>18px</span>
+              </label>
+            </div>
+
+            <div class="studio-section">
+              <span class="studio-section-label">Colors</span>
+              <div class="studio-swatches">${brushSwatches}</div>
+            </div>
+
+            <div class="studio-section">
+              <span class="studio-section-label">Tools</span>
+              <div class="studio-chips">${toolButtons}</div>
+            </div>
+          </div>
+
+          <div class="studio-actions">
+            <button type="button" class="hero-button secondary" data-studio-clear>Clear Sheet</button>
+            <button type="button" class="hero-button secondary" data-studio-close>Close</button>
+            <button type="button" class="hero-button primary" data-studio-save>Save to Canvas</button>
+          </div>
+        </div>
+      </dialog>
+
       <dialog class="help-dialog" data-help>
         <div class="help-shell">
           <h2>How the room works</h2>
-          <p>The room stays in first person the whole time. Frame rearranging and station switching are always available, so you never need to switch modes.</p>
+          <p>The room stays in first person the whole time. Every visitor in the same room sees the same canvases and the same saved artwork updates together.</p>
           <ul class="help-list">
-            <li>Enter the room with your visitor name. That name is ready for future shared sessions when more players join.</li>
-            <li>Desktop walk mode: entering the gallery locks mouse look automatically, and pressing Esc frees the cursor again.</li>
-            <li>Touch walk mode: drag to look and tap the glowing floor markers to jump viewpoints.</li>
-            <li>Desktop frame move: aim the center reticle at a frame, click once to mark it, then click again while the pink target sits on the wall point where you want it.</li>
-            <li>Desktop frame replace: right-click while aiming directly at a frame to upload one photo into that exact frame without disturbing the rest of the wall.</li>
-            <li>Touch frame move: press directly on a frame, drag it over any wall surface, and release to mount it at that exact spot.</li>
+            <li>Enter the room with your visitor name, then walk right up to any blank canvas you want to paint.</li>
+            <li>Desktop walk mode: entering the studio locks mouse look automatically, and pressing Esc frees the cursor again.</li>
+            <li>Touch walk mode: drag to look and tap the glowing floor markers to jump viewpoints around the studio.</li>
+            <li>Click any wall canvas to open a bigger plain white sheet, then paint with brush, marker, spray, or eraser.</li>
+            <li>Save projects the artwork back to that exact canvas in the room for everyone else in the same multiplayer room.</li>
+            <li>Blank All Canvases clears every shared painting surface so the room can restart from scratch.</li>
             <li>Listening corner: walk to the retro console in the corner and click any station button to switch the shared room music, or hit Stop Music to silence it for the whole room.</li>
-            <li>Upload Photos swaps in your own images while keeping your current wall arrangement.</li>
+            <li>Open the same room link on multiple browsers or devices and everyone will see the same canvases and saved painting updates.</li>
           </ul>
           <button type="button" class="dialog-close" data-help-close>Close</button>
         </div>
@@ -1939,6 +2587,14 @@ function escapeHtml(value: string): string {
     .replaceAll('"', '&quot;')
 }
 
+function withAlpha(hexColor: string, alpha: number): string {
+  const color = new THREE.Color(hexColor)
+  const red = Math.round(color.r * 255)
+  const green = Math.round(color.g * 255)
+  const blue = Math.round(color.b * 255)
+  return `rgba(${red}, ${green}, ${blue}, ${alpha})`
+}
+
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value))
 }
@@ -1971,4 +2627,45 @@ function isDefaultTilePlacements(tilePlacements: GalleryTilePlacements): boolean
       candidate?.y === placement.y
     )
   })
+}
+
+function loadImageSource(source: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const image = new Image()
+    image.decoding = 'async'
+    image.onload = () => resolve(image)
+    image.onerror = () => reject(new Error('Unable to load the studio artwork.'))
+    image.src = source
+  })
+}
+
+function createDefaultTruthBoard(
+  objective: string = 'Create art together on every canvas in the room.',
+): TruthBoardState {
+  const normalizedObjective =
+    sanitizeObjective(objective) ?? 'Create art together on every canvas in the room.'
+
+  return {
+    objective: normalizedObjective,
+    phase: 'Studio',
+    leadAgentName: 'Canvas',
+    notes: [
+      `The room is ready for shared art around "${normalizedObjective}".`,
+      'Pick any wall canvas to open a bigger blank sheet.',
+      'Saved paintings reflect straight back into the room for everyone.',
+    ],
+    conclusion: 'The canvas room is ready for the next brush stroke.',
+    cycle: 0,
+    status: 'running',
+  }
+}
+
+function sanitizeObjective(value: string): string | null {
+  const normalized = value.trim().replace(/\s+/g, ' ')
+
+  if (!normalized) {
+    return null
+  }
+
+  return normalized.slice(0, 120)
 }

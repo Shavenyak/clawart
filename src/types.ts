@@ -86,6 +86,18 @@ export interface Viewpoint {
   pose: CameraPose
 }
 
+export type AgentRunStatus = 'running' | 'paused'
+
+export interface TruthBoardState {
+  objective: string
+  phase: string
+  leadAgentName: string
+  notes: string[]
+  conclusion: string
+  cycle: number
+  status: AgentRunStatus
+}
+
 export type GallerySlotAssignments = Record<string, string>
 export type GalleryTileImageAssignments = Record<string, GalleryImage>
 
@@ -96,6 +108,7 @@ export interface GalleryTilePlacement {
 }
 
 export type GalleryTilePlacements = Record<string, GalleryTilePlacement>
+export type StudioCanvasArtworks = Record<string, string>
 
 export interface GalleryState {
   uploadedImages: GalleryImage[]
@@ -104,4 +117,7 @@ export interface GalleryState {
   tilePlacements?: GalleryTilePlacements
   tileImageAssignments?: GalleryTileImageAssignments
   activeStationId?: string
+  studioArtwork?: string
+  studioCanvasArtworks?: StudioCanvasArtworks
+  agentObjective?: string
 }

@@ -1,4 +1,10 @@
-import type { GalleryImage, GalleryTileImageAssignments, GalleryTilePlacements } from '../types'
+import type {
+  GalleryImage,
+  StudioCanvasArtworks,
+  GalleryTileImageAssignments,
+  GalleryTilePlacements,
+  TruthBoardState,
+} from '../types'
 import type {
   ClientToServerMessage,
   ConnectionState,
@@ -19,9 +25,11 @@ interface MultiplayerClientCallbacks {
   onGallerySync: (
     uploadedImages: GalleryImage[],
     tileImageAssignments: GalleryTileImageAssignments,
+    studioCanvasArtworks: StudioCanvasArtworks,
     changedBy: string,
   ) => void
   onStationSync: (activeStationId: string | null, changedBy: string) => void
+  onBoardSync: (truthBoard: TruthBoardState, changedBy: string) => void
   onError: (message: string) => void
 }
 
@@ -80,12 +88,14 @@ export class MuseumMultiplayerClient {
   updateGalleryImages(
     uploadedImages: GalleryImage[],
     tileImageAssignments: GalleryTileImageAssignments,
+    studioCanvasArtworks: StudioCanvasArtworks,
   ): void {
     this.send({
       type: 'gallery_sync',
       payload: {
         uploadedImages,
         tileImageAssignments,
+        studioCanvasArtworks,
       },
     })
   }
@@ -95,6 +105,16 @@ export class MuseumMultiplayerClient {
       type: 'station_sync',
       payload: {
         activeStationId,
+      },
+    })
+  }
+
+  controlRun(action: 'pause' | 'resume' | 'restart', objective?: string): void {
+    this.send({
+      type: 'run_control',
+      payload: {
+        action,
+        objective,
       },
     })
   }
@@ -168,11 +188,15 @@ export class MuseumMultiplayerClient {
           this.callbacks.onGallerySync(
             message.payload.gallery.uploadedImages,
             message.payload.gallery.tileImageAssignments,
+            message.payload.gallery.studioCanvasArtworks,
             message.payload.changedBy,
           )
           break
         case 'station_sync':
           this.callbacks.onStationSync(message.payload.activeStationId, message.payload.changedBy)
+          break
+        case 'board_sync':
+          this.callbacks.onBoardSync(message.payload.truthBoard, message.payload.changedBy)
           break
         case 'error':
           this.callbacks.onError(message.payload.message)

@@ -1,6 +1,7 @@
 import type {
   GalleryImage,
   GalleryState,
+  StudioCanvasArtworks,
   GalleryTileImageAssignments,
   GalleryTilePlacement,
 } from '../types'
@@ -44,6 +45,19 @@ export function restoreGalleryState(roomId: string = 'local'): GalleryState | nu
       typeof parsed.activeStationId === 'string' && parsed.activeStationId.trim().length > 0
         ? parsed.activeStationId.trim()
         : undefined
+    const studioArtwork =
+      typeof parsed.studioArtwork === 'string' && parsed.studioArtwork.trim().length > 0
+        ? parsed.studioArtwork
+        : undefined
+    const studioCanvasArtworks = isStudioCanvasArtworks(parsed.studioCanvasArtworks)
+      ? parsed.studioCanvasArtworks
+      : studioArtwork
+        ? { 'canvas-north-hero': studioArtwork }
+        : undefined
+    const agentObjective =
+      typeof parsed.agentObjective === 'string' && parsed.agentObjective.trim().length > 0
+        ? parsed.agentObjective.trim()
+        : undefined
 
     return {
       uploadedImages,
@@ -52,6 +66,9 @@ export function restoreGalleryState(roomId: string = 'local'): GalleryState | nu
       tilePlacements,
       tileImageAssignments,
       activeStationId,
+      studioArtwork,
+      studioCanvasArtworks,
+      agentObjective,
     }
   } catch {
     return null
@@ -132,4 +149,14 @@ function isTileImageAssignmentRecord(value: unknown): value is GalleryTileImageA
   }
 
   return Object.values(value).every(isGalleryImage)
+}
+
+function isStudioCanvasArtworks(value: unknown): value is StudioCanvasArtworks {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    return false
+  }
+
+  return Object.values(value).every(
+    (entry) => typeof entry === 'string' && entry.startsWith('data:image/'),
+  )
 }

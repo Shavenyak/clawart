@@ -34,6 +34,12 @@ describe('gallery persistence', () => {
         },
       },
       activeStationId: 'radio-rock',
+      studioArtwork: 'data:image/png;base64,studio',
+      studioCanvasArtworks: {
+        'canvas-north-hero': 'data:image/png;base64,studio',
+        'canvas-east-top': 'data:image/png;base64,secondary',
+      },
+      agentObjective: 'Find the shared truth',
     }, 'family-room')
 
     expect(restoreGalleryState('family-room')).toEqual({
@@ -63,6 +69,12 @@ describe('gallery persistence', () => {
         },
       },
       activeStationId: 'radio-rock',
+      studioArtwork: 'data:image/png;base64,studio',
+      studioCanvasArtworks: {
+        'canvas-north-hero': 'data:image/png;base64,studio',
+        'canvas-east-top': 'data:image/png;base64,secondary',
+      },
+      agentObjective: 'Find the shared truth',
     })
   })
 

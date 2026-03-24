@@ -6,13 +6,8 @@ import {
   ROOM_DIMENSIONS,
   ROOM_OBSTACLES,
   VIEWPOINTS,
-  WALL_TEMPLATES,
 } from '../data/layouts'
-import { buildGalleryWalls } from '../gallery/arrangement'
-import {
-  createGalleryWall,
-  type InteractiveGalleryTile,
-} from '../gallery/createGalleryWall'
+import type { InteractiveGalleryTile } from '../gallery/createGalleryWall'
 import { MUSIC_STATIONS } from '../audio/musicStations'
 import type {
   CameraPose,
@@ -20,6 +15,7 @@ import type {
   GalleryTileImageAssignments,
   GalleryTilePlacements,
   GalleryWall,
+  TruthBoardState,
   Viewpoint,
 } from '../types'
 import type { RectBounds, RectObstacle } from '../controls/movement'
@@ -27,6 +23,11 @@ import {
   createMusicCorner,
   type InteractiveMusicControl,
 } from './createMusicCorner'
+import {
+  createCanvasStudioRoom,
+  type InteractiveStudioCanvas,
+} from './createCanvasStudioRoom'
+import type { StudioCanvasArtworks } from '../types'
 
 export interface MuseumHotspot {
   id: string
@@ -57,34 +58,30 @@ export interface MuseumRoom {
   interactiveTiles: InteractiveGalleryTile[]
   interactiveWalls: InteractiveWallPlane[]
   interactiveMusicControls: InteractiveMusicControl[]
+  interactiveStudioCanvases: InteractiveStudioCanvas[]
 }
 
 export function buildMuseumRoom(
-  images: GalleryImage[],
+  _images: GalleryImage[],
   isTouchDevice: boolean,
-  tilePlacements?: GalleryTilePlacements,
-  tileImageAssignments: GalleryTileImageAssignments = {},
+  _tilePlacements?: GalleryTilePlacements,
+  _tileImageAssignments: GalleryTileImageAssignments = {},
+  studioCanvasArtworks: StudioCanvasArtworks = {},
+  truthBoard?: TruthBoardState,
 ): MuseumRoom {
   const group = new THREE.Group()
   group.name = 'museum-room'
 
-  const galleryWalls = buildGalleryWalls(WALL_TEMPLATES, images, tilePlacements, tileImageAssignments)
-  const allRenderableImages = [...images, ...Object.values(tileImageAssignments)]
+  const galleryWalls: GalleryWall[] = []
   const interactiveTiles: InteractiveGalleryTile[] = []
-  const interactiveWalls = WALL_TEMPLATES.map((wall) => createInteractiveWallPlane(wall))
+  const interactiveWalls: InteractiveWallPlane[] = []
   const musicCorner = createMusicCorner(MUSIC_STATIONS)
+  void truthBoard
+  const canvasStudio = createCanvasStudioRoom(studioCanvasArtworks)
   group.add(createLights())
   group.add(createArchitecture())
-  group.add(createBench())
+  group.add(canvasStudio.group)
   group.add(musicCorner.group)
-
-  for (const wall of galleryWalls) {
-    const renderedWall = createGalleryWall(wall, allRenderableImages, MUSEUM_THEME)
-    group.add(renderedWall.group)
-    interactiveTiles.push(...renderedWall.interactiveTiles)
-  }
-
-  interactiveWalls.forEach((wall) => group.add(wall.mesh))
 
   const hotspots = VIEWPOINTS.map((viewpoint) => createHotspot(viewpoint, isTouchDevice))
   hotspots.forEach((hotspot) => group.add(hotspot.object))
@@ -92,7 +89,7 @@ export function buildMuseumRoom(
   return {
     group,
     bounds: ROOM_BOUNDS,
-    obstacles: [...ROOM_OBSTACLES, musicCorner.obstacle],
+    obstacles: [...ROOM_OBSTACLES, musicCorner.obstacle, ...canvasStudio.obstacles],
     hotspots,
     viewpoints: VIEWPOINTS,
     intro: INTRO_POSES,
@@ -101,6 +98,7 @@ export function buildMuseumRoom(
     interactiveTiles,
     interactiveWalls,
     interactiveMusicControls: musicCorner.controls,
+    interactiveStudioCanvases: canvasStudio.canvases,
   }
 }
 
@@ -229,39 +227,6 @@ function createSpotLight(
   }
 }
 
-function createBench(): THREE.Group {
-  const bench = new THREE.Group()
-  const woodMaterial = new THREE.MeshStandardMaterial({
-    color: '#6c4a36',
-    roughness: 0.66,
-  })
-  const cushionMaterial = new THREE.MeshStandardMaterial({
-    color: '#d8c7b0',
-    roughness: 0.85,
-  })
-
-  const seat = new THREE.Mesh(new THREE.BoxGeometry(2.7, 0.14, 0.76), cushionMaterial)
-  seat.position.y = 0.48
-  seat.castShadow = true
-  seat.receiveShadow = true
-  bench.add(seat)
-
-  const base = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.12, 0.45), woodMaterial)
-  base.position.y = 0.28
-  base.castShadow = true
-  base.receiveShadow = true
-  bench.add(base)
-
-  for (const x of [-0.92, 0.92]) {
-    const leg = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.42, 0.1), woodMaterial)
-    leg.position.set(x, 0.21, 0)
-    leg.castShadow = true
-    bench.add(leg)
-  }
-
-  return bench
-}
-
 function createHotspot(viewpoint: Viewpoint, visible: boolean): MuseumHotspot {
   const root = new THREE.Group()
   root.visible = visible
@@ -300,49 +265,6 @@ function createHotspot(viewpoint: Viewpoint, visible: boolean): MuseumHotspot {
     label: viewpoint.label,
     pose: viewpoint.pose,
     object: root,
-  }
-}
-
-function createInteractiveWallPlane(wall: (typeof WALL_TEMPLATES)[number]): InteractiveWallPlane {
-  const size = getInteractiveWallSize(wall.wallId)
-  const mesh = new THREE.Mesh(
-    new THREE.PlaneGeometry(size.width, size.height),
-    new THREE.MeshBasicMaterial({
-      color: '#eb2371',
-      transparent: true,
-      opacity: 0,
-      side: THREE.DoubleSide,
-      depthWrite: false,
-    }),
-  )
-  mesh.position.set(wall.anchor.position.x, wall.anchor.position.y, wall.anchor.position.z)
-  mesh.rotation.y = wall.anchor.rotationY
-  mesh.translateZ(0.002)
-  mesh.userData.wallId = wall.wallId
-
-  return {
-    wallId: wall.wallId,
-    width: size.width,
-    height: size.height,
-    mesh,
-  }
-}
-
-function getInteractiveWallSize(wallId: string): { width: number; height: number } {
-  const commonHeight = ROOM_DIMENSIONS.height - 1.2
-
-  switch (wallId) {
-    case 'east':
-    case 'west':
-      return {
-        width: ROOM_DIMENSIONS.depth - 1.8,
-        height: commonHeight,
-      }
-    default:
-      return {
-        width: ROOM_DIMENSIONS.width - 1.6,
-        height: commonHeight,
-      }
   }
 }
 
