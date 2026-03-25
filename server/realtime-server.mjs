@@ -979,10 +979,10 @@ async function readJsonBody(request) {
 
 function sanitizeRoomId(value) {
   if (typeof value !== 'string' || value.trim().length === 0) {
-    return 'main-gallery'
+    return 'paint-lab'
   }
 
-  return value.replace(/[^a-z0-9-_]/gi, '-').slice(0, 48) || 'main-gallery'
+  return value.replace(/[^a-z0-9-_]/gi, '-').slice(0, 48) || 'paint-lab'
 }
 
 function sanitizeBotId(value) {

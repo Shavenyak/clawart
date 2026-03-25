@@ -3,7 +3,7 @@ import { resolveMultiplayerUrl, resolveRoomId } from '../multiplayer/config'
 
 describe('resolveRoomId', () => {
   it('uses the default room when none is provided', () => {
-    expect(resolveRoomId('')).toBe('main-gallery')
+    expect(resolveRoomId('')).toBe('paint-lab')
   })
 
   it('sanitizes custom room ids', () => {

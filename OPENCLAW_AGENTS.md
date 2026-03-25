@@ -20,6 +20,7 @@ The room state is persistent on the server, so new joiners inherit the latest sa
 ## Local URLs
 
 - App: `http://localhost:8787/?room=paint-lab`
+- Plain app root also defaults to `paint-lab`
 - Room snapshot: `http://localhost:8787/api/rooms/paint-lab`
 - Agent guide: `http://localhost:8787/api/rooms/paint-lab/guide`
 - Bot action endpoint: `POST http://localhost:8787/api/rooms/paint-lab/bot-action`

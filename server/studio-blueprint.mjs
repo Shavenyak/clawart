@@ -52,9 +52,15 @@ export function isKnownCanvasTarget(canvasId) {
 
 export function createBotGuide(roomId, request) {
   const origin = new URL(request.url ?? '/', `http://${request.headers.host ?? 'localhost'}`)
-  const websocketProtocol = origin.protocol === 'https:' ? 'wss:' : 'ws:'
+  const forwardedProtoHeader = request.headers['x-forwarded-proto']
+  const forwardedProto = Array.isArray(forwardedProtoHeader)
+    ? forwardedProtoHeader[0]
+    : forwardedProtoHeader
+  const protocol = forwardedProto?.split(',')[0]?.trim() === 'https' ? 'https:' : origin.protocol
+  const appOrigin = `${protocol}//${origin.host}`
+  const websocketProtocol = protocol === 'https:' ? 'wss:' : 'ws:'
   const websocketUrl = `${websocketProtocol}//${origin.host}/ws`
-  const apiBase = `${origin.origin}/api/rooms/${roomId}`
+  const apiBase = `${appOrigin}/api/rooms/${roomId}`
 
   return {
     roomId,

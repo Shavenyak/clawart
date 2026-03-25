@@ -28,6 +28,8 @@ http://localhost:8787/?room=paint-lab
 
 Open that same URL in another browser or device on the same network and both visitors will see each other as white mannequin dolls and share the same saved canvas updates.
 
+The root app URL now defaults to the shared `paint-lab` room, so opening the plain site link and the documented room link lands everyone in the same default space.
+
 ## Bot guide
 
 Every room now exposes a guide endpoint:

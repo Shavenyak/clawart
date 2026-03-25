@@ -1,4 +1,4 @@
-const DEFAULT_ROOM_ID = 'main-gallery'
+const DEFAULT_ROOM_ID = 'paint-lab'
 const DEV_WEBSOCKET_PORT = '8787'
 
 export function resolveRoomId(search: string = window.location.search): string {
