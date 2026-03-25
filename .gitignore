@@ -31,3 +31,9 @@ playwright*.har
 museum-check*.png
 ui-brand-check.png
 report.json
+
+# Local runtime state
+server/data/
+server-live.log
+server-live.err.log
+.learnings/

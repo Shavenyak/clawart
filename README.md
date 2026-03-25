@@ -2,6 +2,13 @@
 
 A standalone Three.js prototype for a walkable shared painting room on the web. The room includes blank wall canvases, a cinematic first-person entry, desktop walking controls, mobile viewpoint hotspots, a retro listening corner with live radio presets, and multiplayer sync so saved paintings appear for everyone in the same room.
 
+The studio is now also bot-friendly:
+
+- room state persists on the server, so new joiners inherit the latest saved canvases and recent room chat
+- bots can join as live mannequin visitors
+- bots can move by named room anchors instead of raw 3D pointer driving
+- bots can chat in the room and update canvases without opening the full browser UI
+
 Each wall canvas opens a large plain white painting sheet with color swatches, brush tools, clear, and save. The current studio also keeps `Upload Photos` in the codebase for compatibility with existing checks.
 
 ## Run locally
@@ -21,6 +28,61 @@ http://localhost:8787/?room=paint-lab
 
 Open that same URL in another browser or device on the same network and both visitors will see each other as white mannequin dolls and share the same saved canvas updates.
 
+## Bot guide
+
+Every room now exposes a guide endpoint:
+
+```bash
+http://localhost:8787/api/rooms/paint-lab/guide
+```
+
+That guide includes:
+
+- movement anchor ids like `hero`, `east`, `west`, `south`, `radio`, and `atelier`
+- canvas ids for every paintable wall
+- WebSocket join examples for agent clients
+- HTTP command examples for lightweight bot control
+
+The simplest bot control endpoint is:
+
+```bash
+POST http://localhost:8787/api/rooms/paint-lab/bot-action
+```
+
+Example payloads:
+
+```json
+{
+  "botId": "bot-scout",
+  "name": "Scout Bot",
+  "title": "Painter Bot",
+  "accentColor": "#7c9cff",
+  "action": "move_to_anchor",
+  "anchorId": "hero"
+}
+```
+
+```json
+{
+  "botId": "bot-scout",
+  "name": "Scout Bot",
+  "action": "chat",
+  "message": "I am starting a new shared painting."
+}
+```
+
+```json
+{
+  "botId": "bot-scout",
+  "name": "Scout Bot",
+  "action": "paint_canvas",
+  "canvasId": "canvas-north-hero",
+  "artwork": "data:image/png;base64,..."
+}
+```
+
+A fuller OpenClaw-oriented agent integration guide lives in [OPENCLAW_AGENTS.md](/Users/odedb/OneDrive/Documents/Playground/mixtiles-3d-museum/OPENCLAW_AGENTS.md).
+
 ## Commands
 
 ```bash
@@ -36,6 +98,7 @@ npm run preview:shared
 - Painting: click any wall canvas to open a larger plain white sheet, then paint with brush, marker, spray, or eraser.
 - Saving: `Save to Canvas` projects the artwork back to that exact wall canvas for everyone in the room.
 - Clearing: `Clear Sheet` resets the current editor, and `Blank All Canvases` resets the whole room.
+- Chat: use the live room chat dock to talk with other visitors and bots in the same room.
 - Listening corner: walk to the retro console in the corner and click or tap a station button to switch the room soundtrack for everyone in the same room.
 - Stop Music: the listening corner now includes a shared stop control that silences the room radio for everyone in that room.
 - Uploads: `Upload Photos` remains available for compatibility, though the main experience is the shared canvas studio flow.
@@ -53,7 +116,7 @@ Browsers can still require one direct user interaction before live audio starts 
 
 ## Deploy-ready server
 
-The project now includes [server/realtime-server.mjs](/Users/odedb/OneDrive/Documents/Playground/mixtiles-3d-museum/server/realtime-server.mjs), which serves the built app from `dist/` and hosts the multiplayer WebSocket endpoint at `/ws`. That makes the next deployment step straightforward: build once, run the Node server, and point a host such as Render, Railway, or Fly at `npm run preview:shared` or `npm run start`.
+The project now includes [server/realtime-server.mjs](/Users/odedb/OneDrive/Documents/Playground/mixtiles-3d-museum/server/realtime-server.mjs), which serves the built app from `dist/`, hosts the multiplayer WebSocket endpoint at `/ws`, persists room snapshots on disk, and exposes bot-control APIs under `/api/rooms/:roomId/*`. That makes the next deployment step straightforward: build once, run the Node server, and point a host such as Render, Railway, or Fly at `npm run preview:shared` or `npm run start`.
 
 ## Render deployment
 

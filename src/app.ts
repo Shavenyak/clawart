@@ -31,13 +31,23 @@ import {
   STUDIO_BRUSH_COLORS,
   STUDIO_CANVAS_SIZE,
 } from './studio/artwork'
+import {
+  createDefaultCanvasTargets,
+  createDefaultMovementAnchors,
+  formatChatAuthor,
+  summarizeRoomPresence,
+  trimChatMessages,
+} from './studio/collaboration'
 import type {
+  CanvasTarget,
   GalleryImage,
   GalleryState,
-  StudioCanvasArtworks,
   GalleryTileImageAssignments,
   GalleryTilePlacement,
   GalleryTilePlacements,
+  MovementAnchor,
+  RoomChatMessage,
+  StudioCanvasArtworks,
   TruthBoardState,
 } from './types'
 
@@ -76,6 +86,7 @@ interface CarriedFrameState {
 
 interface RemotePlayerRuntime {
   avatar: PlayerAvatar
+  player: RemotePlayerState
   pose: PlayerPoseState
   targetPose: PlayerPoseState
 }
@@ -112,6 +123,12 @@ class MuseumApp {
   private readonly statusSync: HTMLParagraphElement
   private readonly statusStation: HTMLParagraphElement
   private readonly statusTruth: HTMLParagraphElement
+  private readonly botSummary: HTMLParagraphElement
+  private readonly botAnchorList: HTMLDivElement
+  private readonly botCanvasList: HTMLDivElement
+  private readonly chatLog: HTMLUListElement
+  private readonly chatForm: HTMLFormElement
+  private readonly chatInput: HTMLInputElement
   private readonly objectiveInput: HTMLInputElement
   private readonly uploadInput: HTMLInputElement
   private readonly frameUploadInput: HTMLInputElement
@@ -169,6 +186,9 @@ class MuseumApp {
   private tileImageAssignments: GalleryTileImageAssignments = {}
   private studioCanvasArtworks: StudioCanvasArtworks = {}
   private truthBoard: TruthBoardState = createDefaultTruthBoard()
+  private movementAnchors: MovementAnchor[] = createDefaultMovementAnchors()
+  private canvasTargets: CanvasTarget[] = createDefaultCanvasTargets()
+  private chatMessages: RoomChatMessage[] = []
   private room: MuseumRoom | null = null
   private multiplayerClient: MuseumMultiplayerClient | null = null
   private multiplayerSelfId: string | null = null
@@ -217,6 +237,12 @@ class MuseumApp {
     this.statusSync = getRequiredElement(root, '[data-status-sync]')
     this.statusStation = getRequiredElement(root, '[data-status-station]')
     this.statusTruth = getRequiredElement(root, '[data-status-truth]')
+    this.botSummary = getRequiredElement(root, '[data-bot-summary]')
+    this.botAnchorList = getRequiredElement(root, '[data-bot-anchors]')
+    this.botCanvasList = getRequiredElement(root, '[data-bot-canvases]')
+    this.chatLog = getRequiredElement(root, '[data-chat-log]')
+    this.chatForm = getRequiredElement(root, '[data-chat-form]')
+    this.chatInput = getRequiredElement(root, '[data-chat-input]')
     this.objectiveInput = getRequiredElement(root, '[data-objective-input]')
     this.uploadInput = getRequiredElement(root, '[data-upload]')
     this.frameUploadInput = getRequiredElement(root, '[data-upload-frame]')
@@ -285,6 +311,7 @@ class MuseumApp {
     this.updateSyncLabel()
     this.updateStationLabel()
     this.updateTruthLabel()
+    this.updateBotDock()
     this.updateRunButton()
     this.bindEvents()
     this.resize()
@@ -340,6 +367,7 @@ class MuseumApp {
       'click',
       this.handleReset,
     )
+    this.chatForm.addEventListener('submit', this.handleChatSubmit)
     this.uploadInput.addEventListener('change', this.handleUploadInput)
     this.frameUploadInput.addEventListener('change', this.handleFrameUploadInput)
     this.studioBrushInput.addEventListener('input', this.handleStudioBrushInput)
@@ -486,6 +514,10 @@ class MuseumApp {
       this.truthBoard,
     )
     this.scene.add(this.room.group)
+    this.canvasTargets = this.room.interactiveStudioCanvases.map((canvas) => ({
+      id: canvas.id,
+      label: canvas.label,
+    }))
 
     for (const tile of this.room.interactiveTiles) {
       this.interactiveTileByHitArea.set(tile.hitArea.uuid, tile)
@@ -510,6 +542,7 @@ class MuseumApp {
       this.cameraPitch = start.pitch
     }
 
+    this.updateBotDock()
     this.refreshInteractionHighlights()
   }
 
@@ -618,7 +651,7 @@ class MuseumApp {
     this.studioCanvasArtworks = {}
     this.rebuildRoom()
     this.persistState()
-    this.syncGalleryImages()
+    this.multiplayerClient?.resetCanvases()
     void this.renderStudioCanvasFromArtwork(createStudioArtworkDataUrl('blank'))
     this.updateTruthLabel()
     this.setStatus(
@@ -713,6 +746,27 @@ class MuseumApp {
     }
 
     this.openStudioEditor('canvas-north-hero', 'Hero Canvas')
+  }
+
+  private readonly handleChatSubmit = (event: SubmitEvent): void => {
+    event.preventDefault()
+
+    if (!this.entered) {
+      this.setStatus(
+        'Enter the room first',
+        'Choose your visitor name and step into the studio before sending live room chat.',
+      )
+      return
+    }
+
+    const message = this.chatInput.value.trim().replace(/\s+/g, ' ')
+
+    if (!message) {
+      return
+    }
+
+    this.multiplayerClient?.sendChatMessage(message)
+    this.chatInput.value = ''
   }
 
   private readonly handleOpenHelp = (): void => {
@@ -1259,6 +1313,24 @@ class MuseumApp {
             )
           }
         },
+        onCanvasSync: (canvasId, artwork, changedBy) => {
+          if (changedBy !== this.multiplayerSelfId) {
+            this.applyRemoteCanvasSync(canvasId, artwork)
+          }
+        },
+        onRoomReset: (target, changedBy) => {
+          if (changedBy !== this.multiplayerSelfId && target === 'canvases') {
+            this.applyRemoteCanvasReset()
+          }
+        },
+        onChatSync: (chatMessages) => {
+          this.chatMessages = trimChatMessages(chatMessages)
+          this.updateBotDock()
+        },
+        onChatMessage: (chatMessage) => {
+          this.chatMessages = trimChatMessages([...this.chatMessages, chatMessage])
+          this.updateBotDock()
+        },
         onStationSync: (activeStationId, changedBy) => {
           if (changedBy !== this.multiplayerSelfId) {
             void this.activateStation(activeStationId, {
@@ -1285,6 +1357,7 @@ class MuseumApp {
         },
         onError: (message) => {
           console.warn(message)
+          this.setStatus('Live room warning', message)
         },
       })
     }
@@ -1292,6 +1365,7 @@ class MuseumApp {
     this.multiplayerClient.connect({
       roomId: this.roomId,
       name: this.playerName,
+      kind: 'human',
       pose: this.getCurrentPose(0),
       uploadedImages: this.uploadedImages,
       tilePlacements: this.tilePlacements,
@@ -1309,6 +1383,9 @@ class MuseumApp {
     this.tileImageAssignments = snapshot.tileImageAssignments
     this.studioCanvasArtworks = snapshot.studioCanvasArtworks
     this.truthBoard = snapshot.truthBoard
+    this.movementAnchors = snapshot.movementAnchors
+    this.canvasTargets = snapshot.canvasTargets
+    this.chatMessages = trimChatMessages(snapshot.chatMessages)
     this.agentObjective = snapshot.truthBoard.objective
     this.objectiveInput.value = this.agentObjective
     this.selectedStudioCanvasId = null
@@ -1319,6 +1396,7 @@ class MuseumApp {
     this.updateTruthLabel()
     this.updateRunButton()
     this.syncRemotePlayers(snapshot.players)
+    this.updateBotDock()
     void this.activateStation(snapshot.activeStationId, {
       sync: false,
       announce: false,
@@ -1355,11 +1433,44 @@ class MuseumApp {
     this.updateTruthLabel()
   }
 
+  private applyRemoteCanvasSync(canvasId: string, artwork: string | null): void {
+    if (artwork) {
+      this.studioCanvasArtworks = {
+        ...this.studioCanvasArtworks,
+        [canvasId]: artwork,
+      }
+    } else {
+      const nextArtworks = { ...this.studioCanvasArtworks }
+      delete nextArtworks[canvasId]
+      this.studioCanvasArtworks = nextArtworks
+    }
+
+    if (this.studioOpen && this.selectedStudioCanvasId === canvasId) {
+      void this.renderStudioCanvasFromArtwork(artwork ?? createStudioArtworkDataUrl('blank'))
+    }
+
+    this.persistState()
+    this.rebuildRoom()
+    this.updateTruthLabel()
+  }
+
+  private applyRemoteCanvasReset(): void {
+    this.studioCanvasArtworks = {}
+
+    if (this.studioOpen && this.selectedStudioCanvasId) {
+      void this.renderStudioCanvasFromArtwork(createStudioArtworkDataUrl('blank'))
+    }
+
+    this.persistState()
+    this.rebuildRoom()
+    this.updateTruthLabel()
+  }
+
   private syncRemotePlayers(players: RemotePlayerState[]): void {
     const playerIds = new Set<string>()
 
     for (const player of players) {
-      if (player.id === this.multiplayerSelfId || player.kind === 'agent') {
+      if (player.id === this.multiplayerSelfId) {
         continue
       }
 
@@ -1375,16 +1486,20 @@ class MuseumApp {
   }
 
   private upsertRemotePlayer(player: RemotePlayerState): void {
-    if (player.id === this.multiplayerSelfId || player.kind === 'agent') {
+    if (player.id === this.multiplayerSelfId) {
       return
     }
 
     const existing = this.remotePlayers.get(player.id)
-    const displayName = player.name
+    const displayName = player.kind === 'agent' && player.title
+      ? `${player.name} · ${player.title}`
+      : player.name
 
     if (existing) {
       existing.avatar.setName(displayName)
+      existing.player = player
       existing.targetPose = player.pose
+      this.updateBotDock()
       return
     }
 
@@ -1397,9 +1512,11 @@ class MuseumApp {
     this.scene.add(avatar.group)
     this.remotePlayers.set(player.id, {
       avatar,
+      player,
       pose: { ...player.pose },
       targetPose: { ...player.pose },
     })
+    this.updateBotDock()
   }
 
   private removeRemotePlayer(playerId: string): void {
@@ -1412,6 +1529,7 @@ class MuseumApp {
     this.scene.remove(runtime.avatar.group)
     disposeObject(runtime.avatar.group)
     this.remotePlayers.delete(playerId)
+    this.updateBotDock()
   }
 
   private clearRemotePlayers(): void {
@@ -1854,19 +1972,13 @@ class MuseumApp {
   }
 
   private updateSyncLabel(): void {
-    const onlineCount = (this.entered ? 1 : 0) + this.remotePlayers.size
-
-    switch (this.connectionState) {
-      case 'connected':
-        this.statusSync.textContent = `Room: ${this.roomId} · ${onlineCount} online`
-        break
-      case 'connecting':
-        this.statusSync.textContent = `Room: ${this.roomId} · Connecting live sync...`
-        break
-      default:
-        this.statusSync.textContent = `Room: ${this.roomId} · Solo mode`
-        break
-    }
+    this.statusSync.textContent = summarizeRoomPresence(
+      this.roomId,
+      this.connectionState,
+      this.entered,
+      Array.from(this.remotePlayers.values()).map((runtime) => runtime.player),
+    )
+    this.updateBotDock()
   }
 
   private updateTruthLabel(): void {
@@ -1880,6 +1992,80 @@ class MuseumApp {
 
   private updateRunButton(): void {
     this.runToggleButton.textContent = 'Blank All Canvases'
+  }
+
+  private updateBotDock(): void {
+    const remotePlayers = Array.from(this.remotePlayers.values()).map((runtime) => runtime.player)
+    const botCount = remotePlayers.filter((player) => player.kind === 'agent').length
+    const humanCount = remotePlayers.length - botCount + (this.entered ? 1 : 0)
+    const guideUrl = `/api/rooms/${this.roomId}/guide`
+    this.botSummary.textContent = botCount > 0
+      ? `${botCount} bot${botCount === 1 ? '' : 's'} live with ${humanCount} human${humanCount === 1 ? '' : 's'}. Guide: ${guideUrl}`
+      : `No bots live yet. Bots can join by WebSocket or POST ${guideUrl}`
+
+    this.renderChipList(
+      this.botAnchorList,
+      this.movementAnchors.map((anchor) => `${anchor.id}`),
+      'No movement anchors yet.',
+    )
+    this.renderChipList(
+      this.botCanvasList,
+      this.canvasTargets.map((canvas) => canvas.id),
+      'No canvases registered yet.',
+    )
+    this.renderChatLog()
+  }
+
+  private renderChipList(target: HTMLElement, labels: string[], emptyText: string): void {
+    target.innerHTML = ''
+
+    if (labels.length === 0) {
+      const empty = document.createElement('span')
+      empty.className = 'bot-empty'
+      empty.textContent = emptyText
+      target.append(empty)
+      return
+    }
+
+    labels.forEach((label) => {
+      const chip = document.createElement('span')
+      chip.className = 'bot-chip'
+      chip.textContent = label
+      target.append(chip)
+    })
+  }
+
+  private renderChatLog(): void {
+    this.chatLog.innerHTML = ''
+
+    if (this.chatMessages.length === 0) {
+      const empty = document.createElement('li')
+      empty.className = 'chat-empty'
+      empty.textContent = 'No shared chat yet.'
+      this.chatLog.append(empty)
+      return
+    }
+
+    trimChatMessages(this.chatMessages).forEach((message) => {
+      const item = document.createElement('li')
+      item.className = `chat-item${message.authorKind === 'agent' ? ' is-agent' : ''}`
+
+      const author = document.createElement('span')
+      author.className = 'chat-author'
+      author.textContent = formatChatAuthor(message)
+      if (message.accentColor) {
+        author.style.color = message.accentColor
+      }
+
+      const body = document.createElement('span')
+      body.className = 'chat-body'
+      body.textContent = message.message
+
+      item.append(author, body)
+      this.chatLog.append(item)
+    })
+
+    this.chatLog.scrollTop = this.chatLog.scrollHeight
   }
 
   private updateStationLabel(overrideText?: string): void {
@@ -1981,9 +2167,10 @@ class MuseumApp {
       ...this.studioCanvasArtworks,
       [this.selectedStudioCanvasId]: this.studioCanvas.toDataURL('image/png'),
     }
+    const nextArtwork = this.studioCanvasArtworks[this.selectedStudioCanvasId]
     this.persistState()
     this.rebuildRoom()
-    this.syncGalleryImages()
+    this.multiplayerClient?.updateCanvasArtwork(this.selectedStudioCanvasId, nextArtwork)
     this.closeStudioEditor()
     this.setStatus(
       'Painting projected',
@@ -2408,6 +2595,41 @@ function createShellMarkup({
         <p class="status-station" data-status-station>Radio: Walk to the listening corner and pick a live station</p>
       </aside>
 
+      <aside class="bot-card">
+        <p class="status-kicker">Bot Dock</p>
+        <p class="status-title">Autonomous Studio Layer</p>
+        <p class="status-copy" data-bot-summary>No bots live yet. Bots can join this room and reuse the saved canvases.</p>
+
+        <div class="bot-section">
+          <p class="bot-section-label">Movement Anchors</p>
+          <div class="bot-chip-list" data-bot-anchors></div>
+        </div>
+
+        <div class="bot-section">
+          <p class="bot-section-label">Canvas Targets</p>
+          <div class="bot-chip-list" data-bot-canvases></div>
+        </div>
+
+        <div class="bot-section">
+          <p class="bot-section-label">Room Chat</p>
+          <ul class="chat-log" data-chat-log>
+            <li class="chat-empty">No shared chat yet.</li>
+          </ul>
+          <form class="chat-form" data-chat-form>
+            <input
+              class="chat-input"
+              data-chat-input
+              type="text"
+              maxlength="220"
+              placeholder="Say something to the room..."
+              autocomplete="off"
+              spellcheck="false"
+            />
+            <button type="submit" class="chat-send">Send</button>
+          </form>
+        </div>
+      </aside>
+
       <input class="upload-input" data-upload type="file" accept="image/*" multiple />
       <input class="upload-input" data-upload-frame type="file" accept="image/*" />
 
@@ -2473,6 +2695,8 @@ function createShellMarkup({
             <li>Blank All Canvases clears every shared painting surface so the room can restart from scratch.</li>
             <li>Listening corner: walk to the retro console in the corner and click any station button to switch the shared room music, or hit Stop Music to silence it for the whole room.</li>
             <li>Open the same room link on multiple browsers or devices and everyone will see the same canvases and saved painting updates.</li>
+            <li>Bots can use the room guide at <code>/api/rooms/${escapeHtml(roomId)}/guide</code> to find movement anchors, canvas ids, and command examples.</li>
+            <li>The server now keeps the room state live on disk, so new joiners inherit the latest saved drawings and recent room chat.</li>
           </ul>
           <button type="button" class="dialog-close" data-help-close>Close</button>
         </div>

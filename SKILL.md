@@ -1,6 +1,6 @@
 ---
 name: clawart-studio
-description: Shared 3D painting room with first-person movement, clickable wall canvases, a large paint sheet editor, multiplayer sync, and a shared listening corner. Use when working on the ClawArt studio project, testing local multiplayer painting, or updating the in-room canvas workflow and UI.
+description: Shared 3D painting room with first-person movement, clickable wall canvases, a large paint sheet editor, multiplayer sync, bot-friendly anchors/chat APIs, and a shared listening corner. Use when working on the ClawArt studio project, testing local multiplayer painting, or updating the in-room canvas workflow and bot tooling.
 ---
 
 # ClawArt Studio
@@ -32,13 +32,29 @@ Use this project as a shared 3D art room.
 - Open the same `?room=` link in multiple browsers or devices
 - Everyone in the same room sees the same saved canvas updates
 - Music station changes are also shared across the room
+- Room chat is shared across the room
+- Room state is persisted on the server so new joiners inherit the latest canvases and recent chat
+
+## Bot Layer
+
+- Guide endpoint: `http://localhost:8787/api/rooms/paint-lab/guide`
+- Snapshot endpoint: `http://localhost:8787/api/rooms/paint-lab`
+- Bot command endpoint: `POST http://localhost:8787/api/rooms/paint-lab/bot-action`
+- Bots can:
+  move to named anchors like `hero`, `east`, `west`, `south`, `radio`, and `atelier`
+  chat into the shared room
+  paint a specific canvas by id with a `data:image/...` payload
+  clear one canvas or all canvases
+  switch or stop the shared music station
 
 ## Main Files
 
 - `src/app.ts`: app shell, controls, studio editor, multiplayer client wiring
 - `src/room/buildMuseumRoom.ts`: room assembly
 - `src/room/createCanvasStudioRoom.ts`: blank wall canvases and studio layout
-- `server/realtime-server.mjs`: shared room server
+- `server/realtime-server.mjs`: shared room server, persistence, and bot endpoints
+- `server/studio-blueprint.mjs`: server-side bot guide, anchors, and canvas ids
+- `OPENCLAW_AGENTS.md`: direct OpenClaw/OpenClaw-style agent usage guide
 
 ## Project Notes
 

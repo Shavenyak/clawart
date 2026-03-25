@@ -1,8 +1,13 @@
 services:
   - type: web
-    name: mixtiles-3d-museum
+    name: clawart
     runtime: docker
     plan: starter
+    numInstances: 1
     dockerfilePath: ./Dockerfile
     dockerContext: .
     healthCheckPath: /health
+    disk:
+      name: clawart-room-data
+      mountPath: /app/server/data
+      sizeGB: 1

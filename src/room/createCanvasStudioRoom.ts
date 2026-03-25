@@ -18,7 +18,7 @@ export interface CanvasStudioRuntime {
   canvases: InteractiveStudioCanvas[]
 }
 
-interface CanvasSpec {
+export interface CanvasSpec {
   id: string
   label: string
   wall: 'north' | 'south' | 'east' | 'west'
@@ -28,7 +28,7 @@ interface CanvasSpec {
   height: number
 }
 
-const CANVAS_SPECS: CanvasSpec[] = [
+export const CANVAS_SPECS: CanvasSpec[] = [
   { id: 'canvas-north-hero', label: 'Hero Canvas', wall: 'north', x: 0, y: 0.2, width: 2.45, height: 1.5 },
   { id: 'canvas-east-top', label: 'East Canvas One', wall: 'east', x: -1.18, y: 0.78, width: 1.1, height: 0.82 },
   { id: 'canvas-east-bottom', label: 'East Canvas Two', wall: 'east', x: 0.92, y: -0.2, width: 1.25, height: 0.96 },

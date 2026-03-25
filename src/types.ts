@@ -1,6 +1,7 @@
 export type ImageSource = 'placeholder' | 'upload'
 export type FrameStyle = 'oak' | 'black' | 'white' | 'canvas'
 export type ImageOrientation = 'portrait' | 'landscape' | 'square'
+export type PlayerKind = 'human' | 'agent'
 
 export interface MusicStation {
   id: string
@@ -84,6 +85,28 @@ export interface Viewpoint {
   id: string
   label: string
   pose: CameraPose
+}
+
+export interface MovementAnchor {
+  id: string
+  label: string
+  pose: CameraPose
+}
+
+export interface CanvasTarget {
+  id: string
+  label: string
+}
+
+export interface RoomChatMessage {
+  id: string
+  authorId: string
+  authorName: string
+  authorKind: PlayerKind
+  authorTitle?: string
+  accentColor?: string
+  message: string
+  createdAt: string
 }
 
 export type AgentRunStatus = 'running' | 'paused'

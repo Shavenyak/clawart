@@ -1,4 +1,5 @@
 import type {
+  RoomChatMessage,
   GalleryImage,
   StudioCanvasArtworks,
   GalleryTileImageAssignments,
@@ -28,6 +29,10 @@ interface MultiplayerClientCallbacks {
     studioCanvasArtworks: StudioCanvasArtworks,
     changedBy: string,
   ) => void
+  onCanvasSync: (canvasId: string, artwork: string | null, changedBy: string) => void
+  onRoomReset: (target: 'canvases', changedBy: string) => void
+  onChatSync: (chatMessages: RoomChatMessage[]) => void
+  onChatMessage: (chatMessage: RoomChatMessage) => void
   onStationSync: (activeStationId: string | null, changedBy: string) => void
   onBoardSync: (truthBoard: TruthBoardState, changedBy: string) => void
   onError: (message: string) => void
@@ -96,6 +101,34 @@ export class MuseumMultiplayerClient {
         uploadedImages,
         tileImageAssignments,
         studioCanvasArtworks,
+      },
+    })
+  }
+
+  updateCanvasArtwork(canvasId: string, artwork: string | null): void {
+    this.send({
+      type: 'canvas_sync',
+      payload: {
+        canvasId,
+        artwork,
+      },
+    })
+  }
+
+  resetCanvases(): void {
+    this.send({
+      type: 'room_reset',
+      payload: {
+        target: 'canvases',
+      },
+    })
+  }
+
+  sendChatMessage(message: string): void {
+    this.send({
+      type: 'chat_message',
+      payload: {
+        message,
       },
     })
   }
@@ -191,6 +224,22 @@ export class MuseumMultiplayerClient {
             message.payload.gallery.studioCanvasArtworks,
             message.payload.changedBy,
           )
+          break
+        case 'canvas_sync':
+          this.callbacks.onCanvasSync(
+            message.payload.canvasId,
+            message.payload.artwork,
+            message.payload.changedBy,
+          )
+          break
+        case 'room_reset':
+          this.callbacks.onRoomReset(message.payload.target, message.payload.changedBy)
+          break
+        case 'chat_sync':
+          this.callbacks.onChatSync(message.payload.chatMessages)
+          break
+        case 'chat_message':
+          this.callbacks.onChatMessage(message.payload.chatMessage)
           break
         case 'station_sync':
           this.callbacks.onStationSync(message.payload.activeStationId, message.payload.changedBy)

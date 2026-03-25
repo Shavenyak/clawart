@@ -1,8 +1,12 @@
 import type {
+  CanvasTarget,
   GalleryImage,
-  StudioCanvasArtworks,
   GalleryTileImageAssignments,
   GalleryTilePlacements,
+  MovementAnchor,
+  PlayerKind,
+  RoomChatMessage,
+  StudioCanvasArtworks,
   TruthBoardState,
 } from '../types'
 
@@ -23,7 +27,7 @@ export interface PlayerPoseState {
 export interface RemotePlayerState {
   id: string
   name: string
-  kind: 'human' | 'agent'
+  kind: PlayerKind
   title?: string
   accentColor?: string
   pose: PlayerPoseState
@@ -36,12 +40,18 @@ export interface RoomSnapshot {
   activeStationId: string | null
   studioCanvasArtworks: StudioCanvasArtworks
   truthBoard: TruthBoardState
+  movementAnchors: MovementAnchor[]
+  canvasTargets: CanvasTarget[]
+  chatMessages: RoomChatMessage[]
   players: RemotePlayerState[]
 }
 
 export interface JoinPayload {
   roomId: string
   name: string
+  kind?: PlayerKind
+  title?: string
+  accentColor?: string
   pose: PlayerPoseState
   uploadedImages: GalleryImage[]
   tilePlacements: GalleryTilePlacements
@@ -79,6 +89,31 @@ export type ClientToServerMessage =
       payload: {
         action: 'pause' | 'resume' | 'restart'
         objective?: string
+      }
+    }
+  | {
+      type: 'chat_message'
+      payload: {
+        message: string
+      }
+    }
+  | {
+      type: 'canvas_sync'
+      payload: {
+        canvasId: string
+        artwork: string | null
+      }
+    }
+  | {
+      type: 'room_reset'
+      payload: {
+        target: 'canvases'
+      }
+    }
+  | {
+      type: 'waypoint_move'
+      payload: {
+        anchorId: string
       }
     }
 
@@ -130,6 +165,33 @@ export type ServerToClientMessage =
       type: 'board_sync'
       payload: {
         truthBoard: TruthBoardState
+        changedBy: string
+      }
+    }
+  | {
+      type: 'chat_sync'
+      payload: {
+        chatMessages: RoomChatMessage[]
+      }
+    }
+  | {
+      type: 'chat_message'
+      payload: {
+        chatMessage: RoomChatMessage
+      }
+    }
+  | {
+      type: 'canvas_sync'
+      payload: {
+        canvasId: string
+        artwork: string | null
+        changedBy: string
+      }
+    }
+  | {
+      type: 'room_reset'
+      payload: {
+        target: 'canvases'
         changedBy: string
       }
     }
