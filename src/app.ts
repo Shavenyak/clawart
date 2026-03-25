@@ -313,6 +313,7 @@ class MuseumApp {
     this.updateTruthLabel()
     this.updateBotDock()
     this.updateRunButton()
+    this.updateShellState()
     this.bindEvents()
     this.resize()
     this.renderer.setAnimationLoop(this.animate)
@@ -612,6 +613,7 @@ class MuseumApp {
     this.toolbarEnterButton.textContent = 'Re-center'
     this.heroEnterButton.textContent = 'Enter Studio'
     this.playerVelocity.set(0, 0)
+    this.updateShellState()
 
     const start = this.room.defaultPose
     this.playerPosition.set(start.position.x, 0, start.position.z)
@@ -1983,11 +1985,12 @@ class MuseumApp {
 
   private updateTruthLabel(): void {
     const paintedCount = Object.keys(this.studioCanvasArtworks).length
+    const totalCanvases = Math.max(this.canvasTargets.length, 1)
     const editingLabel = this.selectedStudioCanvasLabel
 
     this.statusTruth.textContent = editingLabel
       ? `Canvas: editing ${editingLabel}`
-      : `Canvas: ${paintedCount} painted | click any wall canvas to open a blank sheet`
+      : `Canvas: ${paintedCount}/${totalCanvases} painted`
   }
 
   private updateRunButton(): void {
@@ -2119,6 +2122,7 @@ class MuseumApp {
     this.updateTruthLabel()
     this.updateStudioToolButtons()
     this.studioSourceLabel.textContent = sourceLabel
+    this.updateShellState()
 
     if (this.pointerLocked) {
       document.exitPointerLock()
@@ -2146,6 +2150,7 @@ class MuseumApp {
     this.selectedStudioCanvasId = null
     this.selectedStudioCanvasLabel = null
     this.updateTruthLabel()
+    this.updateShellState()
 
     if (typeof this.studioDialog.close === 'function' && this.studioDialog.open) {
       this.studioDialog.close()
@@ -2470,6 +2475,17 @@ class MuseumApp {
     this.loadingScreen.classList.toggle('is-visible', isLoading)
   }
 
+  private updateShellState(): void {
+    const shell = this.root.querySelector<HTMLDivElement>('.museum-app')
+
+    if (!shell) {
+      return
+    }
+
+    shell.classList.toggle('is-entered', this.entered)
+    shell.classList.toggle('is-studio-open', this.studioOpen)
+  }
+
   private setStatus(title: string, copy: string): void {
     this.statusTitle.textContent = title
     this.statusCopy.textContent = copy
@@ -2535,8 +2551,8 @@ function createShellMarkup({
           </div>
           <div class="brand-copy">
             <p class="brand-kicker">ClawArt</p>
-            <h1 class="brand-title">Welcome to ClawArt Canvas Studio!</h1>
-            <p class="brand-sub">Walk around the room, click any blank canvas to open a big painting sheet, and create art together with everyone in the same shared room.</p>
+            <h1 class="brand-title">ClawArt Shared Studio</h1>
+            <p class="brand-sub">Walk, paint, chat, and let bots explore the room with you.</p>
           </div>
         </div>
 
@@ -2586,32 +2602,21 @@ function createShellMarkup({
       </section>
 
       <aside class="status-card">
-        <p class="status-kicker">Live Canvas Room</p>
+        <p class="status-kicker">Room HUD</p>
         <p class="status-title" data-status-title>Canvas studio prepared</p>
         <p class="status-copy" data-status-copy>Choose your visitor name, enter the room, and click any canvas to start painting.</p>
         <p class="status-visitor" data-status-visitor>Visitor: Guest</p>
         <p class="status-sync" data-status-sync>Room: ${escapeHtml(roomId)} · Solo mode</p>
-        <p class="status-truth" data-status-truth>Canvas: 0 painted | click any wall canvas to open a blank sheet</p>
+        <p class="status-truth" data-status-truth>Canvas: 0/1 painted</p>
         <p class="status-station" data-status-station>Radio: Walk to the listening corner and pick a live station</p>
       </aside>
 
       <aside class="bot-card">
-        <p class="status-kicker">Bot Dock</p>
-        <p class="status-title">Autonomous Studio Layer</p>
+        <p class="status-kicker">Room Chat</p>
+        <p class="status-title">Talk with everyone here</p>
         <p class="status-copy" data-bot-summary>No bots live yet. Bots can join this room and reuse the saved canvases.</p>
 
         <div class="bot-section">
-          <p class="bot-section-label">Movement Anchors</p>
-          <div class="bot-chip-list" data-bot-anchors></div>
-        </div>
-
-        <div class="bot-section">
-          <p class="bot-section-label">Canvas Targets</p>
-          <div class="bot-chip-list" data-bot-canvases></div>
-        </div>
-
-        <div class="bot-section">
-          <p class="bot-section-label">Room Chat</p>
           <ul class="chat-log" data-chat-log>
             <li class="chat-empty">No shared chat yet.</li>
           </ul>
@@ -2628,6 +2633,21 @@ function createShellMarkup({
             <button type="submit" class="chat-send">Send</button>
           </form>
         </div>
+
+        <details class="bot-details">
+          <summary>Bot tools and room ids</summary>
+          <div class="bot-details-grid">
+            <div class="bot-section">
+              <p class="bot-section-label">Movement Anchors</p>
+              <div class="bot-chip-list" data-bot-anchors></div>
+            </div>
+
+            <div class="bot-section">
+              <p class="bot-section-label">Canvas Targets</p>
+              <div class="bot-chip-list" data-bot-canvases></div>
+            </div>
+          </div>
+        </details>
       </aside>
 
       <input class="upload-input" data-upload type="file" accept="image/*" multiple />

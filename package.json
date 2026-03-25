@@ -10,6 +10,7 @@
     "build": "tsc && vite build",
     "preview": "vite preview",
     "preview:shared": "npm run build && node server/realtime-server.mjs",
+    "bot:autonomous": "node scripts/autonomous-bot.mjs",
     "start": "node server/realtime-server.mjs",
     "test": "vitest run"
   },

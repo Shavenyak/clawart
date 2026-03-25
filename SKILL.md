@@ -40,6 +40,9 @@ Use this project as a shared 3D art room.
 - Guide endpoint: `http://localhost:8787/api/rooms/paint-lab/guide`
 - Snapshot endpoint: `http://localhost:8787/api/rooms/paint-lab`
 - Bot command endpoint: `POST http://localhost:8787/api/rooms/paint-lab/bot-action`
+- Demo autonomous bot: `npm run bot:autonomous -- --url http://localhost:8787 --room paint-lab`
+- Built-in OpenClaw repo skill: `skills/clawart-studio/SKILL.md`
+- OpenClaw install guide: `OPENCLAW_INSTALL.md`
 - Bots can:
   move to named anchors like `hero`, `east`, `west`, `south`, `radio`, and `atelier`
   chat into the shared room
@@ -55,6 +58,7 @@ Use this project as a shared 3D art room.
 - `server/realtime-server.mjs`: shared room server, persistence, and bot endpoints
 - `server/studio-blueprint.mjs`: server-side bot guide, anchors, and canvas ids
 - `OPENCLAW_AGENTS.md`: direct OpenClaw/OpenClaw-style agent usage guide
+- `skills/clawart-studio/SKILL.md`: installable built-in OpenClaw skill for this repo
 
 ## Project Notes
 

@@ -220,6 +220,41 @@ button {
   box-shadow: var(--shadow);
 }
 
+.museum-app.is-entered .control-bar {
+  gap: 10px;
+}
+
+.museum-app.is-entered .brand-banner {
+  min-width: 0;
+  padding: 10px 12px;
+  gap: 10px;
+  box-shadow: 0 10px 24px rgba(43, 5, 20, 0.08);
+}
+
+.museum-app.is-entered .brand-logo-shell {
+  width: 110px;
+  padding: 10px 12px;
+}
+
+.museum-app.is-entered .brand-logo {
+  min-height: 28px;
+  font-size: 1.45rem;
+}
+
+.museum-app.is-entered .brand-title {
+  font-size: 1rem;
+}
+
+.museum-app.is-entered .brand-sub {
+  display: none;
+}
+
+.museum-app.is-entered .toolbar-button {
+  min-height: 42px;
+  padding: 0.72rem 1rem;
+  font-size: 0.86rem;
+}
+
 .brand-logo-shell {
   display: grid;
   place-items: center;
@@ -473,18 +508,44 @@ button {
   z-index: 4;
 }
 
+.museum-app.is-entered .status-card {
+  top: 92px;
+  right: 18px;
+  bottom: auto;
+  width: min(250px, calc(100vw - 36px));
+  padding: 14px;
+}
+
+.museum-app.is-entered .status-card .status-title,
+.museum-app.is-entered .status-card .status-copy {
+  display: none;
+}
+
 .bot-card {
   position: absolute;
-  right: 24px;
-  bottom: 232px;
-  width: min(340px, calc(100vw - 48px));
-  max-height: min(52vh, 460px);
+  left: 24px;
+  bottom: 24px;
+  width: min(430px, calc(100vw - 48px));
+  max-height: min(38vh, 340px);
   padding: 18px 18px 16px;
   border-radius: var(--radius-md);
   z-index: 4;
   display: grid;
   gap: 12px;
   overflow: hidden;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(12px);
+  transition:
+    opacity 220ms ease,
+    transform 220ms ease;
+}
+
+.museum-app.is-entered .bot-card {
+  padding: 14px;
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(0);
 }
 
 .status-kicker {
@@ -560,6 +621,29 @@ button {
   gap: 8px;
 }
 
+.bot-details {
+  border-top: 1px solid rgba(213, 196, 201, 0.5);
+  padding-top: 10px;
+}
+
+.bot-details summary {
+  cursor: pointer;
+  color: var(--ink-soft);
+  font-size: 0.78rem;
+  font-weight: 700;
+  list-style: none;
+}
+
+.bot-details summary::-webkit-details-marker {
+  display: none;
+}
+
+.bot-details-grid {
+  display: grid;
+  gap: 12px;
+  margin-top: 10px;
+}
+
 .bot-section-label {
   margin: 0;
   color: var(--ink-soft);
@@ -597,8 +681,8 @@ button {
 .chat-log {
   display: grid;
   gap: 8px;
-  min-height: 108px;
-  max-height: 140px;
+  min-height: 120px;
+  max-height: 170px;
   margin: 0;
   padding: 0 2px 0 0;
   list-style: none;
@@ -1079,9 +1163,16 @@ button {
   .bot-card {
     right: 16px;
     left: 16px;
-    bottom: 206px;
+    bottom: 16px;
     width: auto;
     max-height: min(40vh, 360px);
+  }
+
+  .museum-app.is-entered .status-card {
+    top: 84px;
+    right: 16px;
+    left: auto;
+    width: min(220px, calc(100vw - 32px));
   }
 
   .hero-title {

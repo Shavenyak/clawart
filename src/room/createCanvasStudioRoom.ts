@@ -29,14 +29,28 @@ export interface CanvasSpec {
 }
 
 export const CANVAS_SPECS: CanvasSpec[] = [
-  { id: 'canvas-north-hero', label: 'Hero Canvas', wall: 'north', x: 0, y: 0.2, width: 2.45, height: 1.5 },
-  { id: 'canvas-east-top', label: 'East Canvas One', wall: 'east', x: -1.18, y: 0.78, width: 1.1, height: 0.82 },
-  { id: 'canvas-east-bottom', label: 'East Canvas Two', wall: 'east', x: 0.92, y: -0.2, width: 1.25, height: 0.96 },
-  { id: 'canvas-west-top', label: 'West Canvas One', wall: 'west', x: -1.1, y: 0.74, width: 1.2, height: 0.9 },
-  { id: 'canvas-west-bottom', label: 'West Canvas Two', wall: 'west', x: 0.94, y: -0.12, width: 1.18, height: 0.88 },
-  { id: 'canvas-south-left', label: 'South Canvas One', wall: 'south', x: -1.78, y: 0.5, width: 0.92, height: 0.72 },
-  { id: 'canvas-south-middle', label: 'South Canvas Two', wall: 'south', x: 0, y: 0.38, width: 1.28, height: 0.92 },
-  { id: 'canvas-south-right', label: 'South Canvas Three', wall: 'south', x: 1.78, y: 0.5, width: 0.92, height: 0.72 },
+  { id: 'canvas-north-hero', label: 'Hero Canvas', wall: 'north', x: 0, y: 0.18, width: 2.45, height: 1.5 },
+  { id: 'canvas-north-left-top', label: 'North Canvas One', wall: 'north', x: -2.1, y: 1.0, width: 0.8, height: 0.58 },
+  { id: 'canvas-north-left-mid', label: 'North Canvas Two', wall: 'north', x: -2.12, y: 0.08, width: 0.92, height: 0.7 },
+  { id: 'canvas-north-right-top', label: 'North Canvas Three', wall: 'north', x: 2.1, y: 1.0, width: 0.8, height: 0.58 },
+  { id: 'canvas-north-right-mid', label: 'North Canvas Four', wall: 'north', x: 2.12, y: 0.08, width: 0.92, height: 0.7 },
+  { id: 'canvas-north-lower-left', label: 'North Canvas Five', wall: 'north', x: -1.02, y: -0.9, width: 0.96, height: 0.74 },
+  { id: 'canvas-north-lower-right', label: 'North Canvas Six', wall: 'north', x: 1.02, y: -0.9, width: 0.96, height: 0.74 },
+  { id: 'canvas-east-top', label: 'East Canvas One', wall: 'east', x: -1.86, y: 1.02, width: 0.84, height: 0.62 },
+  { id: 'canvas-east-upper-mid', label: 'East Canvas Two', wall: 'east', x: -0.72, y: 0.34, width: 0.96, height: 0.72 },
+  { id: 'canvas-east-lower-mid', label: 'East Canvas Three', wall: 'east', x: 0.72, y: -0.3, width: 1.02, height: 0.76 },
+  { id: 'canvas-east-bottom', label: 'East Canvas Four', wall: 'east', x: 1.94, y: -0.98, width: 0.82, height: 1.04 },
+  { id: 'canvas-west-top', label: 'West Canvas One', wall: 'west', x: -1.86, y: 1.02, width: 0.84, height: 0.62 },
+  { id: 'canvas-west-upper-mid', label: 'West Canvas Two', wall: 'west', x: -0.72, y: 0.34, width: 0.96, height: 0.72 },
+  { id: 'canvas-west-lower-mid', label: 'West Canvas Three', wall: 'west', x: 0.72, y: -0.3, width: 1.02, height: 0.76 },
+  { id: 'canvas-west-bottom', label: 'West Canvas Four', wall: 'west', x: 1.94, y: -0.98, width: 0.82, height: 1.04 },
+  { id: 'canvas-south-left', label: 'South Canvas One', wall: 'south', x: -2.18, y: 0.96, width: 0.7, height: 0.54 },
+  { id: 'canvas-south-left-mid', label: 'South Canvas Two', wall: 'south', x: -1.2, y: 0.14, width: 0.86, height: 0.64 },
+  { id: 'canvas-south-middle', label: 'South Canvas Three', wall: 'south', x: 0, y: 0.38, width: 1.28, height: 0.92 },
+  { id: 'canvas-south-right-mid', label: 'South Canvas Four', wall: 'south', x: 1.2, y: 0.14, width: 0.86, height: 0.64 },
+  { id: 'canvas-south-right', label: 'South Canvas Five', wall: 'south', x: 2.18, y: 0.96, width: 0.7, height: 0.54 },
+  { id: 'canvas-south-lower-left', label: 'South Canvas Six', wall: 'south', x: -1.48, y: -0.94, width: 0.84, height: 0.62 },
+  { id: 'canvas-south-lower-right', label: 'South Canvas Seven', wall: 'south', x: 1.48, y: -0.94, width: 0.84, height: 0.62 },
 ]
 
 export function createCanvasStudioRoom(

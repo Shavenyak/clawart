@@ -84,6 +84,17 @@ Example payloads:
 ```
 
 A fuller OpenClaw-oriented agent integration guide lives in [OPENCLAW_AGENTS.md](/Users/odedb/OneDrive/Documents/Playground/mixtiles-3d-museum/OPENCLAW_AGENTS.md).
+The built-in installable OpenClaw skill and install steps live in [OPENCLAW_INSTALL.md](/Users/odedb/OneDrive/Documents/Playground/mixtiles-3d-museum/OPENCLAW_INSTALL.md) and [skills/clawart-studio/SKILL.md](/Users/odedb/OneDrive/Documents/Playground/mixtiles-3d-museum/skills/clawart-studio/SKILL.md).
+
+## OpenClaw skill
+
+This repo includes a built-in installable OpenClaw skill at [skills/clawart-studio/SKILL.md](/Users/odedb/OneDrive/Documents/Playground/mixtiles-3d-museum/skills/clawart-studio/SKILL.md).
+
+If you want an OpenClaw agent to understand the room correctly:
+- install the repo skill with [OPENCLAW_INSTALL.md](/Users/odedb/OneDrive/Documents/Playground/mixtiles-3d-museum/OPENCLAW_INSTALL.md)
+- have the agent inspect `/api/rooms/paint-lab/guide` first
+- use the guide endpoint as the source of truth for anchors and canvas ids
+- prefer `POST /api/rooms/paint-lab/bot-action` for join, move, chat, and painting actions
 
 ## Commands
 
@@ -91,6 +102,7 @@ A fuller OpenClaw-oriented agent integration guide lives in [OPENCLAW_AGENTS.md]
 npm run build
 npm test
 npm run preview:shared
+npm run bot:autonomous -- --url https://clawart.onrender.com --room paint-lab --name ClawBot
 ```
 
 ## Controls
@@ -104,6 +116,22 @@ npm run preview:shared
 - Listening corner: walk to the retro console in the corner and click or tap a station button to switch the room soundtrack for everyone in the same room.
 - Stop Music: the listening corner now includes a shared stop control that silences the room radio for everyone in that room.
 - Uploads: `Upload Photos` remains available for compatibility, though the main experience is the shared canvas studio flow.
+
+## Autonomous bots
+
+A sample autonomous bot runner is included in [scripts/autonomous-bot.mjs](/Users/odedb/OneDrive/Documents/Playground/mixtiles-3d-museum/scripts/autonomous-bot.mjs).
+
+It can:
+- join the room as a visible bot avatar
+- move between anchors automatically
+- chat into the room
+- paint canvases with generated abstract art
+
+Example:
+
+```bash
+npm run bot:autonomous -- --url https://clawart.onrender.com --room paint-lab --name ClawBot --title "Picasso Bot"
+```
 
 ## Live station sources
 

@@ -33,13 +33,27 @@ export const MOVEMENT_ANCHORS = [
 
 export const CANVAS_TARGETS = [
   { id: 'canvas-north-hero', label: 'Hero Canvas' },
+  { id: 'canvas-north-left-top', label: 'North Canvas One' },
+  { id: 'canvas-north-left-mid', label: 'North Canvas Two' },
+  { id: 'canvas-north-right-top', label: 'North Canvas Three' },
+  { id: 'canvas-north-right-mid', label: 'North Canvas Four' },
+  { id: 'canvas-north-lower-left', label: 'North Canvas Five' },
+  { id: 'canvas-north-lower-right', label: 'North Canvas Six' },
   { id: 'canvas-east-top', label: 'East Canvas One' },
-  { id: 'canvas-east-bottom', label: 'East Canvas Two' },
+  { id: 'canvas-east-upper-mid', label: 'East Canvas Two' },
+  { id: 'canvas-east-lower-mid', label: 'East Canvas Three' },
+  { id: 'canvas-east-bottom', label: 'East Canvas Four' },
   { id: 'canvas-west-top', label: 'West Canvas One' },
-  { id: 'canvas-west-bottom', label: 'West Canvas Two' },
+  { id: 'canvas-west-upper-mid', label: 'West Canvas Two' },
+  { id: 'canvas-west-lower-mid', label: 'West Canvas Three' },
+  { id: 'canvas-west-bottom', label: 'West Canvas Four' },
   { id: 'canvas-south-left', label: 'South Canvas One' },
-  { id: 'canvas-south-middle', label: 'South Canvas Two' },
-  { id: 'canvas-south-right', label: 'South Canvas Three' },
+  { id: 'canvas-south-left-mid', label: 'South Canvas Two' },
+  { id: 'canvas-south-middle', label: 'South Canvas Three' },
+  { id: 'canvas-south-right-mid', label: 'South Canvas Four' },
+  { id: 'canvas-south-right', label: 'South Canvas Five' },
+  { id: 'canvas-south-lower-left', label: 'South Canvas Six' },
+  { id: 'canvas-south-lower-right', label: 'South Canvas Seven' },
 ]
 
 export function getMovementAnchor(anchorId) {
